@@ -1,0 +1,418 @@
+---
+title: "TERN - morphology data for SLGA II"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Experiments with extracting and formatting soils morphology data in a form useful for TERN SLGA II modelling. Outputs will be published as a Web Feature Service. Potential for further development into a regular soils data service.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, results = 'hold', fig.height = 6,
+                      fig.align = 'center', warning = FALSE, message = FALSE,
+                      eval = FALSE)
+```
+
+```{r pkgs, results = 'hide'}
+options(stringsAsFactors = FALSE, scipen = 999)
+library(sf)            # vector data IO and processing
+library(DBI)           # database interface
+library(ROracle)       # Oracle database drivers
+library(getPass)       # password management
+library(units)         # for working with unit-attributed data
+library(tidyverse)     # general data manipulation and display
+
+Sys.setenv(
+  'TNS_ADMIN'   = file.path('C:', 'Users', Sys.getenv('USERNAME'), 'Oracle'),
+  'ORACLE_HOME' = 'C:/Program Files/Oracle Instant Client'
+  )
+SALI <- dbConnect(dbDriver('Oracle'),
+                  username = 'obrienle',
+                  password = getPass(),
+                  dbname   = 'sispda',
+                  host     = 'ex02client01',
+                  port     = 1521)
+
+if(!dir.exists(file.path(getwd(), 'SALI_DATA'))) {
+  dir.create(file.path(getwd(), 'SALI_DATA'))
+}
+
+```
+
+## Service structure
+
+Initial plans are to publish a two-layer web feature service with point geometry:
+
+  * Layer 1: Obs-level data, plus some profile summary information like depth to A
+  * Layer 2: Wide-formatted horizon data relevant to SLGA II modelling 
+  
+Since the spec for SLGA II is not yet settled, the content of the layers is likely to change. 
+
+## Layer 1
+
+Primary keys are `PROJECT_CODE`, `SITE_ID`, `OBS_NO`.
+
+Data is filtered to projects where `REG_PROJECTS.AVAIL_STATUS = 'E'` and `REG_PROJECTS.SITE_QC_STATUS = 'P'`. It may also be necessary to filter on `REG_PROJECTS.PROJ_QC_STATUS = 'P'` for consistency with existing services and APIs, although it should be noted that none of the fields checked by the project-level QC procedure are relevant to this service.
+
+### Simple parameters 
+
+Simple parameters are those where only one record per site or per observation exists, so they're easy to query out:
+
+  * Observation date
+  * Site and obs type, obs reason
+  * Location coordinates
+  * Location measurement method and EPE where known
+  * Runoff, permeability and drainage classes
+  * Landform element and pattern codes
+  * Slope and relief parameters 
+  * Soil classifications (ASC, PPF, GSG)
+
+Where more than one soil classification exists on an observation, they usually refer to a classification for one or more buried profiles. Since buried profiles are not being modelled, these are excluded and only the first soil classification record is retained.
+
+Tax unit codes are unlikely to be useful to the modelling as SPC-level data is not being used, so those are left out for now. Other parameters may also be dropped if their value proves low.
+
+```{r layer_simple}
+l1_simple <- 
+  dbGetQuery(SALI, 
+             "select project_code, site_id, obs_no,
+               obs_date, site_type, obs_type,
+               longitude, latitude, loc_accuracy, loc_meas_method,
+               runoff, permeability, drainage, lith_code,
+               slope_eval_method, slope_pct, slope_class, slope_morph_type, 
+               elem_inc_slope, elem_type_code,
+               modal_slope, relief_class, rel_mod_slope_class, patt_type_code,
+               asc_confidence, asc_ord, subord_asc_code as asc_subord, 
+               great_group_asc_code as asc_great_group,
+               subgroup_asc_code as asc_subgroup,
+               asc_fam1, asc_fam2, asc_fam3, asc_fam4, asc_fam5, 
+               ppf, exhibit_gsg_code as gsg
+             from reg_projects
+             join sit_sites using (project_code)
+             join sit_observations using (project_code, site_id)
+             join sit_locations using (project_code, site_id, obs_no)
+             left outer join (select * from sit_soil_classifications 
+               where soil_class_no = 1) sc 
+                 using (project_code, site_id, obs_no)
+             where avail_status = 'E'
+             and site_qc_status = 'P'
+             and datum = 3
+             order by project_code, site_id, obs_no") %>% 
+  dplyr::filter(LONGITUDE > 1) # >:-(
+```
+ 
+### Abbreviated parameters 
+  
+Some site and observation-level parameters can have multiple records, that can be reported in a simplified format. These are
+
+  * Site disturbance (report 'worst')
+  * Microrelief (report presence/absence)
+  * Surface coarse fragments (report total abundance, dominant size, and maximum size)
+  * Outcrop (report total abundance)
+  
+#### Site disturbance
+
+Note that only 132 observations currently have more than one disturbance recorded, and at least one is just a duplicate.
+
+```{r l1_dist}
+l1_dist <- 
+   dbGetQuery(SALI, 
+             "select project_code, site_id, obs_no, disturb_no, disturb_type
+             from reg_projects
+             join sit_disturbances using (project_code)
+             where avail_status = 'E'
+             and site_qc_status = 'P'
+             order by project_code, site_id, obs_no") %>% 
+  mutate(DISTURBANCE = 
+           factor(DISTURB_TYPE, levels = as.character(seq(9) - 1), 
+                  ordered = TRUE)) %>% 
+  group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>%
+  summarise(DISTURBANCE = as.character(max(DISTURBANCE)))
+
+```
+
+#### Microrelief 
+
+The following simplifies the SALI records down to 'present'/'confirmed absent'/'not recorded' for 'landscape' microrelief only - that which is controlled by inherent soil and parent material properties. As such, the gilgai types are retained, along with karst country and mound/depression microrelief. Excluded are biotic microrelief (as its often ephemeral), limited-extent features like sinkholes and springs, and microrelief induced by loss of vegetation cover (e.g. terracettes and slumps).
+
+```{r l1_gilgai}
+L1_gilgai <- 
+ dbGetQuery(SALI, 
+             "select project_code, site_id, obs_no, micro_no, micro_type
+             from reg_projects
+             join sit_microreliefs using (project_code)
+             where avail_status = 'E'
+             and site_qc_status = 'P'
+             order by project_code, site_id, obs_no") %>% 
+  group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>%
+  summarise(GILGAI_PRESENCE = {
+    if(any(MICRO_TYPE %in% c('A', 'C', 'G', 'K', 'L', 'M', 'N'))) {
+      TRUE
+    } else if(any(MICRO_TYPE == 'Z')) { 
+      FALSE 
+    } else { 
+      NA }
+    })
+```
+
+#### Surface coarse fragments
+
+Multiple records can be created for surface coarse fragments where e.g. poorly sorted lag gravels exist. These records are infrequent but should be retained. Below, surface coarse fragment data is simplified to report total abundance as a percentage, and then both the maximum and most abundant size fractions observed. Lithology and shape are omitted for now as they may not be highly relevant to modelling e.g. surface water infiltration.
+
+```{r l1_scfs}
+# decode coarse frag abundance categories - see Yellow Book
+cf_abunds <- tribble(~ABUND, ~LO, ~MID, ~HI,
+                        '0',   0,    0,   0,
+                        '1', 0.1,  1.5,   2,
+                        '2',   2,    6,  10,
+                        '3',  10,   15,  20,
+                        '4',  20,   35,  50,
+                        '5',  50,   70,  90,
+                        '6',  90,   95, 100)
+
+# function to get largest sum of abundances that doesn't exceed 100
+sum_abund <- function(x = NULL) {
+  # x is a vector of cats
+  lo  <- sum(cf_abunds$LO[cf_abunds$ABUND %in% x])
+  mid <- sum(cf_abunds$MID[cf_abunds$ABUND %in% x]) 
+  hi  <- sum(cf_abunds$HI[cf_abunds$ABUND %in% x])
+  pick <- which(c(lo, mid, hi) <= 100)
+  if(all(is.na(pick))) { return(100) } # all add up to > 100 e.g. 4, 6
+  c(lo, mid, hi)[max(pick)] # pick biggest below 100%
+}
+
+l1_scf <- 
+ dbGetQuery(SALI, 
+             "select project_code, site_id, obs_no,
+             surf_frag_no, abundance as surf_frag_abund, surf_frag_size
+             from reg_projects
+             join sit_surf_coarse_frags using (project_code)
+             where avail_status = 'E'
+             and site_qc_status = 'P'
+              order by project_code, site_id, obs_no, surf_frag_no") %>% 
+  group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>%
+  summarise(SURF_FRAG_TOTAL_ABUND_PC = sum_abund(SURF_FRAG_ABUND),
+            SURF_FRAG_MAX_SIZE = max(SURF_FRAG_SIZE),
+            SURF_FRAG_DOM_SIZE = {
+              x <- SURF_FRAG_SIZE[which(SURF_FRAG_ABUND == max(SURF_FRAG_ABUND))]
+              # for abundance ties, pick largest size
+              if(length(x) > 1) { max(x) } else { x }
+            })
+```
+
+#### Rock Outcrop
+
+Very few multiple outcrop records exist, but where they do, total abundance is reported. 
+
+```{r l1_outcrop}
+# decode coarse frag abundance categories
+oc_abunds <- tribble(~ABUND, ~LO, ~MID, ~HI,
+                        '0',   0,    0,   0,
+                        '1', 0.1,  1.5,   2,
+                        '2',   2,    6,  10,
+                        '3',  10,   15,  20,
+                        '4',  20,   35,  50,
+                        '5',  50,   75, 100)
+
+sum_oc_abund <- function(x = NULL) {
+  # x is a vector of cats
+  lo  <- sum(oc_abunds$LO[oc_abunds$ABUND %in% x])
+  mid <- sum(oc_abunds$MID[oc_abunds$ABUND %in% x]) 
+  hi  <- sum(oc_abunds$HI[oc_abunds$ABUND %in% x])
+  pick <- which(c(lo, mid, hi) <= 100)
+  if(all(is.na(pick))) { return(100) } 
+  c(lo, mid, hi)[max(pick)] 
+}
+
+l1_outcrop <- 
+   dbGetQuery(SALI, 
+             "select project_code, site_id, obs_no, outcrop_no, 
+                abundance as outcrop_abund
+              from reg_projects
+              join sit_rock_outcrops using (project_code)
+              where avail_status = 'E'
+                and site_qc_status = 'P'
+              order by project_code, site_id, obs_no, outcrop_no") %>% 
+  group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>%
+  summarise(OUTCROP_ABUND = sum_oc_abund(OUTCROP_ABUND))
+
+```
+
+### Profile summary parameters
+
+Some summaries of soil profile characteristics can be reported at the observation level. These include a number that have been specifically requested for SLGA II. The ASRIS tech spec (v1.6) also defines some of these 
+
+  * Depth of A1 horizon
+  * Total depth of A horizons
+  * Depth to B2 horizon
+  * Depth to impeded layer (rock, pan etc)
+  * Depth of solum
+  * Depth of observation
+  * Name of deepest horizon (can help with interpretation of DOA)
+  * Min, Median, and Max A and B textures
+  * Substrate nature (unconsolidated, consolidated etc)
+  * 'duplexiness' 
+  * Presence/absence of bleached A2 horizon
+
+#### Total depth of A
+
+```{r doa}
+doa <- 
+  dbGetQuery(SALI, 
+  "select project_code, site_id, obs_no, max(lower_depth) as depth_of_A
+   from reg_projects
+   join sit_horizons using (project_code)
+   where avail_status = 'E'
+     and site_qc_status = 'P'
+     and design_master = 'A'
+     and design_num_prefix is null /* no buried A allowed! */
+   group by project_code, site_id, obs_no
+   order by project_code, site_id, obs_no")
+```
+
+#### Depth of Solum
+
+This can include buried horizons. There's no easy way to truncate those where a C or D interrupts the sequence, but these are going to be very rare so, meh.
+
+```{r doa}
+dos <- 
+  dbGetQuery(SALI, 
+  "select project_code, site_id, obs_no, max(lower_depth) as solum_depth
+   from reg_projects
+   join sit_horizons using (project_code)
+   where avail_status = 'E'
+     and site_qc_status = 'P'
+     and design_master in ('A', 'B')
+   group by project_code, site_id, obs_no 
+   order by project_code, site_id, obs_no")
+
+dos_2 <- 
+dbGetQuery(SALI, 
+  "select project_code, site_id, obs_no, max(lower_depth) as solum_depth
+   from reg_projects
+   join sit_horizons using (project_code)
+   where avail_status = 'E'
+     and site_qc_status = 'P'
+     and design_master in ('A', 'B')
+     and texture_code is not null
+   group by project_code, site_id, obs_no 
+   order by project_code, site_id, obs_no")
+  
+dos_3 <- 
+  dbGetQuery(SALI, 
+  "select project_code, site_id, obs_no, max(lower_depth) as solum_depth
+   from reg_projects
+   join sit_horizons using (project_code)
+   where avail_status = 'E'
+     and site_qc_status = 'P'
+     and regexp_like(design_master, 'A|B')
+     and design_num_prefix is null
+   group by project_code, site_id, obs_no 
+   order by project_code, site_id, obs_no")
+
+```
+
+#### Depth to hard layer
+
+Using the shallowest of `SIT_OBSERVATIONS.DEPTH_RHORIZON`, upper depth of an R horizon (possibly where it is thinner than 0.3m as this indicates the horizon was hard enough that equipment couldn't penetrate), presence of a pan with cementation of 2,3,4
+
+```{r hardlyr}
+
+rhor_obs <- 
+  dbGetQuery(SALI,
+  "select project_code, site_id, obs_no, depth_rhorizOn
+   from reg_projects
+   join sit_observations using (project_code)
+   where avail_status = 'E'
+     and site_qc_status = 'P'
+   group by project_code, site_id, obs_no 
+   order by project_code, site_id, obs_no")
+  
+rhor_hor <- 
+  dbGetQuery(SALI,
+  "select project_code, site_id, obs_no, (lower_depth - upper_dpeth) as hor_thick
+   from reg_projects
+   join sit_horizons using (project_code)
+   where avail_status = 'E'
+     and site_qc_status = 'P'
+     and design_master in ('R')
+   group by project_code, site_id, obs_no 
+   order by project_code, site_id, obs_no")
+  )
+
+cem_pan <- 
+  dbGetQuery(SALI,
+  "select project_code, site_id, obs_no, horizon_no, upper_depth, lower_depth, pan_no,
+  pan_type, cementation, continuity
+   from reg_projects
+   join sit_horizons using (project_code)
+   left outer join (select * from sit_pans where cementation in ('2', '3', '4'))
+     using (project_code)
+   where avail_status = 'E'
+     and site_qc_status = 'P'
+   order by project_code, site_id, obs_no") %>% 
+group_by(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO) %>% 
+  summarise(HARD_PAN = ifelse(any(!is,na(PAN_NO)), TRUE, FALSE)) %>%
+  group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>% 
+  summarise(PAN_DEPTH = ifelse(any(HARD_PAN == TRUE), 
+                               # upper depth of pan horizon,
+                               NA))
+              
+
+```
+
+The layer components are now joined to create a one-row-per-observation dataset.
+
+```{r l1_all}
+layer_one <- left_join(l1_core, l1_gilgai, 
+                       by = c('PROJECT_CODE','SITE_ID', 'OBS_NO')) %>% 
+  left_join(., l1_dist,  by = c('PROJECT_CODE','SITE_ID', 'OBS_NO')) %>% 
+  left_join(., l1_scf,  by = c('PROJECT_CODE','SITE_ID', 'OBS_NO')) %>% 
+  arrange(PROJECT_CODE, SITE_ID, OBS_NO)
+
+layer_one_pts <- 
+  st_as_sf(layer_one, coords = c('LONGITUDE', 'LATITUDE'), crs = 4283)
+
+plot(layer_one_pts['GILGAI_PRESENCE'], pch = 20)
+```
+
+
+
+
+
+
+## Layer 2
+
+Primary keys are `PROJECT_CODE`, `SITE_ID`, `OBS_NO`, `HORIZON_NO`.
+
+Data is filtered as for Layer 1
+
+## Horizon level data
+
+  * Horizon name
+  * upper and lower depth
+  * horizon boundary distinctness
+  * soil moisture status
+  * strength/consistency
+  * Texture code + qualifier
+  * Colour and mottles
+  * structural data
+  * coarse frags (need all for PAW!)
+  * segregations
+  * pans
+  * cutans
+  
+No need for samples, that stuff is in the existing lab data API. Not sure about field tests at this stage.
+
+
+  
+
+  
+  
+
+
+
+
