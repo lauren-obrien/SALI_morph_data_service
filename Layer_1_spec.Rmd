@@ -43,6 +43,126 @@ if(!dir.exists(file.path(getwd(), 'SALI_DATA'))) {
 
 ```
 
+## Data snapshot
+
+Take a snapshot of relevant SALI tables to work with offline
+
+```{r getdat}
+today <- '20190928' # edit for fresh snapshot
+
+sit_datafile <- file.path(getwd(), 'SALI_DATA', 
+                          paste0('SALI_SIT-data_', today, '.rds'))
+
+if(file.exists(sit_datafile)) {
+  sit_data <- readRDS(sit_datafile)
+} else {
+  sit_data <- 
+    list(
+      "SIT" = 
+        dbGetQuery(SALI,
+            "with temp1 as (
+              select project_code from reg_projects 
+              where site_qc_status = 'P'
+              and avail_status = 'E'
+              )
+             select * from temp1
+             left join sit_sites using (project_code)
+             order by project_code, site_id"),
+      "OBS" = 
+        dbGetQuery(SALI,
+            "with temp1 as (
+              select project_code from reg_projects 
+              where site_qc_status = 'P'
+              and avail_status = 'E'
+              )
+             select * from temp1
+             left join sit_observations using (project_code)
+             order by project_code, site_id, obs_no"),
+      "LOC" = # grabbing all but SHAPE col, ROracle can't handle SDO_GEOM :(
+        dbGetQuery(SALI,
+            "with temp1 as (
+              select project_code from reg_projects 
+              where site_qc_status = 'P'
+              and avail_status = 'E'
+              )
+             select project_code, site_id, obs_no, datum, derived_location,
+             zone, easting, northing, longitude, latitude, loc_accuracy, 
+             created_by, creation_date, last_updated_by, last_update_date
+             from temp1
+             left join sit_locations using (project_code)
+             where datum = 3
+             and longitude > 1
+             order by project_code, site_id, obs_no"),
+      "CLA" = 
+        dbGetQuery(SALI,
+            "with temp1 as (
+              select project_code from reg_projects 
+              where site_qc_status = 'P'
+              and avail_status = 'E'
+              )
+             select * from temp1
+             left join sit_soil_classifications using (project_code)
+             order by project_code, site_id, obs_no, soil_class_no"), 
+      "DIS" = 
+        dbGetQuery(SALI,
+            "with temp1 as (
+              select project_code from reg_projects 
+              where site_qc_status = 'P'
+              and avail_status = 'E'
+              )
+             select * from temp1
+             left join sit_disturbances using (project_code)
+             order by project_code, site_id, obs_no, disturb_no"),
+      "MIC" = 
+        dbGetQuery(SALI,
+            "with temp1 as (
+              select project_code from reg_projects 
+              where site_qc_status = 'P'
+              and avail_status = 'E'
+              )
+             select * from temp1
+             left join sit_microreliefs using (project_code)
+             order by project_code, site_id, obs_no, micro_no"),
+      "SCF" =
+        dbGetQuery(SALI,
+            "with temp1 as (
+              select project_code from reg_projects 
+              where site_qc_status = 'P'
+              and avail_status = 'E'
+              )
+             select * from temp1
+             left join sit_surf_coarse_frags using (project_code)
+             order by project_code, site_id, obs_no, surf_frag_no"),
+      "OTC" = 
+        dbGetQuery(SALI,
+            "with temp1 as (
+              select project_code from reg_projects 
+              where site_qc_status = 'P'
+              and avail_status = 'E'
+              )
+             select * from temp1
+             left join sit_rock_outcrops using (project_code)
+             order by project_code, site_id, obs_no, outcrop_no"),
+      "HOR" = 
+        dbGetQuery(SALI,
+            "with temp1 as (
+              select project_code from reg_projects 
+              where site_qc_status = 'P'
+              and avail_status = 'E'
+              )
+             select * from temp1
+             left join sit_horizons using (project_code)
+             order by project_code, site_id, obs_no, horizon_no")
+      # add horizon-level stuff later
+    )
+
+  saveRDS(sit_data, sit_datafile)
+}
+
+```
+
+
+
 ## Service structure
 
 Initial plans are to publish a two-layer web feature service with point geometry:
