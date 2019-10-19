@@ -1,0 +1,68 @@
+TEXTURE_CODE,MEANING,GROUP
+FSC,fine sandy clay,clay
+FSHC,fine sandy heavy clay,clay
+FSLC,fine sandy light clay,clay
+FSLMC,fine sandy light medium clay,clay
+FSMC,fine sandy medium clay,clay
+FSMHC,fine sandy medium heavy clay,clay
+HC,heavy clay,clay
+KSC,coarse sandy clay,clay
+KSHC,coarse sandy heavy clay,clay
+KSLC,coarse sandy light clay,clay
+KSLMC,coarse sandy light medium clay,clay
+KSMC,coarse sandy medium clay,clay
+KSMHC,coarse sandy medium heavy clay,clay
+LC,light clay,clay
+LCFS,light clay fine sandy,clay
+LCKS,"Light clay, coarse sandy",clay
+LCS,light clay sandy,clay
+LMC,light medium clay,clay
+MC,medium clay,clay
+MCS,Medium clay sandy,clay
+MHC,medium heavy clay,clay
+SC,sandy clay,clay
+SHC,sandy heavy clay,clay
+SLC,sandy light clay,clay
+SLMC,sandy light medium clay,clay
+SMC,sandy medium clay,clay
+SMHC,sandy medium heavy clay,clay
+ZC,silty clay,clay
+ZHC,silty heavy clay,clay
+ZLMC,silty light medium clay,clay
+ZMC,silty medium clay,clay
+ZMHC,silty medium heavy clay,clay
+CL,clay loam,clay loam
+CLFS,"clay loam, fine sandy",clay loam
+CLKS,"clay loam, coarse sandy",clay loam
+CLS,"clay loam, sandy",clay loam
+FSCL,fine sandy clay loam,clay loam
+KSCL,coarse sandy clay loam,clay loam
+SCL,sandy clay loam,clay loam
+FSL,fine sandy loam,loam
+KSL,coarse sandy loam,loam
+L,loam,loam
+LFSY,"Loam, fine sandy",loam
+LSY,"Loam, sandy",loam
+SL,sandy loam,loam
+AP,sapric peat,peat
+CP,clayey peat,peat
+GP,granular peat,peat
+HP,hemic peat,peat
+IP,fibric peat,peat
+LP,loamy peat,peat
+SP,sandy peat,peat
+CFS,clayey fine sand,sand
+CKS,clayey coarse sand,sand
+CS,clayey sand,sand
+FS,fine sand,sand
+KS,coarse sand,sand
+LFS,loamy fine sand,sand
+LKS,loamy coarse sand,sand
+LMS,loamy medium sand,sand
+LS,loamy sand,sand
+S,sand,sand
+CLZ,"Clay loam, silty",clay loam
+LCZ,Light clay silty,clay
+ZCL,silty clay loam,silt
+ZL,silty loam,silt
+ZLC,silty light clay,silt

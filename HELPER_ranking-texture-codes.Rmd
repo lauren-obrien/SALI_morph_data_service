@@ -1,0 +1,828 @@
+---
+title: "Ranking Texture Classes"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, results = 'hold', fig.height = 6,
+                      fig.align = 'center', warning = FALSE, message = FALSE,
+                      eval = FALSE)
+```
+
+Trying to introduce some ranking measures for soil texture codes. This allows us to do things like report the relative heaviest or lightest texture in a profile (or part of the solum).
+
+```{r pkgs, results = 'hide'}
+options(stringsAsFactors = FALSE, scipen = 999)
+library(sf)            # vector data IO and processing
+library(DBI)           # database interface
+library(ROracle)       # Oracle database drivers
+library(getPass)       # password management
+library(units)         # for working with unit-attributed data
+library(tidyverse)     # general data manipulation and display
+
+Sys.setenv(
+  'TNS_ADMIN'   = file.path('C:', 'Users', Sys.getenv('USERNAME'), 'Oracle'),
+  'ORACLE_HOME' = 'C:/Program Files/Oracle Instant Client'
+  )
+SALI <- dbConnect(dbDriver('Oracle'),
+                  username = 'obrienle',
+                  password = getPass(),
+                  dbname   = 'sispda',
+                  host     = 'ex02client01',
+                  port     = 1521)
+
+if(!dir.exists(file.path(getwd(), 'SALI_DATA'))) {
+  dir.create(file.path(getwd(), 'SALI_DATA'))
+}
+
+if(!dir.exists(file.path(getwd(), 'DERIVED_DATA'))) {
+  dir.create(file.path(getwd(), 'DERIVED_DATA'))
+}
+```
+
+There are a large number of distinct texture codes in use across SALI:
+
+```{r gettc}
+all_tcs <- dbGetQuery(SALI, 
+  "select (texture_code || texture_qualifier) as texture, 
+    texture_code, texture_qualifier, description, qual_desc,
+    count(*) as n_codes
+   from sit_horizons 
+   left outer join sit_textures using (texture_code)
+   left outer join (select rv_low_value as texture_qualifier, 
+                      rv_meaning as qual_desc 
+                    from sali_ref_codes 
+                    where rv_domain = 'TEXTURE QUALIFIERS') src
+    using(texture_qualifier)
+   group by (texture_code || texture_qualifier), texture_code, texture_qualifier, 
+     description, qual_desc
+   order by texture_code, texture_qualifier")
+
+head(all_tcs)
+```
+
+`r nrow(all_tcs)`, in fact, counting qualifiers.
+
+The 'core' texture codes and their common modifiers (K for coarse, F for fine, Z for silty) are defined in the Yellow Book, and are nominally ordered by increasing overall fineness as such:
+
+  * Sand: KS, S, FS,
+  * Loamy Sand: LKS, LS, LFS
+  * Clayey Sand: CKS, CS, CFS
+  * Sandy Loam: KSL, SL, FSL, ZL
+  * Loam: LSY, LFSY, L
+  * Sandy Clay Loam: KSCL, SCL, FSCL, ZCL
+  * Clay Loam: CLKS, CLS, CLFS, CLZ, CL
+  * Light Clay: KSLC, SLC, FSLC, ZLC, LC
+  * Light Medium Clay: KSLMC, SLMC, FSLMC, ZLMC, LMC
+  * Medium Clay: KSMC, SMC, FSMC, ZMC, MC
+  * Medium Heavy Clay: KSMHC, SMHC, FSMHC, ZMHC, MHC
+  * Heavy Clay: KSHC, SHC, FSHC, ZHC, HC
+
+
+Unmodified codes like LS are held to contain 'medium sand', the size range of which is not discussed in the Yellow Book. There are also some +/- modifiers that can be applied to non-clay textures (clay textures have them built in), and some A/P modifiers for mineral soils that are not quite peats but are highly organic. Peat codes exist but are kind of off to one side (IP, AP, HP) - but they'll have to be ranked in somehow, or just ignored.
+
+SALI data is still messier than this though, because it contains historical data recorded pre-Yellow Book and pre-SALI, when people just made up codes as they went along. 
+
+Thinking about a nested ranking with three levels:
+
+  * Level 1 - 'clay', 'clay loam', 'loam', 'sand', 'gravel', 'peat'. Useful for things like suitability subclasses and layperson-oriented decodes.
+  * Level 2 - splits classes up - light/medium/heavy for clays, light/heavy for the others
+  * Level 3 - ranking within that on sand fraction fineness (off descriptions)
+  * Level 4 - throw in modifiers
+  
+### Level 1
+
+```{r plusminus}
+main_tcs <- all_tcs %>% 
+  filter(!is.na(TEXTURE_CODE)) %>% 
+  select(TEXTURE_CODE, DESCRIPTION) %>% 
+  distinct() %>% 
+  arrange(TEXTURE_CODE) 
+
+tc_ranks <- main_tcs %>% 
+  mutate(GROUP = case_when(TEXTURE_CODE == 'AP'     ~ 'peat',
+                           TEXTURE_CODE == 'CFS'    ~ 'sand',
+                           TEXTURE_CODE == 'CKS'    ~ 'sand',
+                           TEXTURE_CODE == 'CL'     ~ 'clay loam',
+                           TEXTURE_CODE == 'CLFS'   ~ 'clay loam',
+                           TEXTURE_CODE == 'CLFSZ'  ~ 'clay loam', 
+                           TEXTURE_CODE == 'CLKS'   ~ 'clay loam',
+                           TEXTURE_CODE == 'CLMS'   ~ 'clay loam',
+                           TEXTURE_CODE == 'CLS'    ~ 'clay loam',
+                           TEXTURE_CODE == 'CLZ'    ~ 'clay loam', 
+                           TEXTURE_CODE == 'CP'     ~ 'peat',
+                           TEXTURE_CODE == 'CS'     ~ 'sand',
+                           TEXTURE_CODE == 'CSC'    ~ 'clay',
+                           TEXTURE_CODE == 'FS'     ~ 'sand',
+                           TEXTURE_CODE == 'FSC'    ~ 'clay',
+                           TEXTURE_CODE == 'FSCL'   ~ 'loam',
+                           TEXTURE_CODE == 'FSCLZ'  ~ 'loam', 
+                           TEXTURE_CODE == 'FSHC'   ~ 'clay', 
+                           TEXTURE_CODE == 'FSL'    ~ 'loam', 
+                           TEXTURE_CODE == 'FSLC'   ~ 'clay', 
+                           TEXTURE_CODE == 'FSLCZ'  ~ 'clay', 
+                           TEXTURE_CODE == 'FSLMC'  ~ 'clay',
+                           TEXTURE_CODE == 'FSLZ'   ~ 'loam',
+                           TEXTURE_CODE == 'FSMC'   ~ 'clay',
+                           TEXTURE_CODE == 'FSMHC'  ~ 'clay',
+                           TEXTURE_CODE == 'GP'     ~ 'peat',
+                           TEXTURE_CODE == 'GR'     ~ 'gravel',
+                           TEXTURE_CODE == 'HC'     ~ 'clay',
+                           TEXTURE_CODE == 'HP'     ~ 'peat',
+                           TEXTURE_CODE == 'IP'     ~ 'peat',
+                           TEXTURE_CODE == 'KS'     ~ 'sand',
+                           TEXTURE_CODE == 'KSC'    ~ 'clay',
+                           TEXTURE_CODE == 'KSCL'   ~ 'loam',
+                           TEXTURE_CODE == 'KSHC'   ~ 'clay',
+                           TEXTURE_CODE == 'KSL'    ~ 'loam',
+                           TEXTURE_CODE == 'KSLC'   ~ 'clay',
+                           TEXTURE_CODE == 'KSLMC'  ~ 'clay',
+                           TEXTURE_CODE == 'KSMC'   ~ 'clay',
+                           TEXTURE_CODE == 'KSMHC'  ~ 'clay',
+                           TEXTURE_CODE == 'KSS'    ~ 'sand',
+                           TEXTURE_CODE == 'L'      ~ 'loam',
+                           TEXTURE_CODE == 'LC'     ~ 'clay',
+                           TEXTURE_CODE == 'LCFS'   ~ 'clay',
+                           TEXTURE_CODE == 'LCKS'   ~ 'clay',
+                           TEXTURE_CODE == 'LCS'    ~ 'clay',
+                           TEXTURE_CODE == 'LCZ'    ~ 'clay',
+                           TEXTURE_CODE == 'LFS'    ~ 'sand',
+                           TEXTURE_CODE == 'LFSY'   ~ 'loam',
+                           TEXTURE_CODE == 'LFSYZ'  ~ 'loam',
+                           TEXTURE_CODE == 'LKS'    ~ 'sand',
+                           TEXTURE_CODE == 'LMC'    ~ 'clay',
+                           TEXTURE_CODE == 'LMCFS'  ~ 'clay',
+                           TEXTURE_CODE == 'LMCKS'  ~ 'clay',
+                           TEXTURE_CODE == 'LMCS'   ~ 'clay',
+                           TEXTURE_CODE == 'LMCZ'   ~ 'clay',
+                           TEXTURE_CODE == 'LMS'    ~ 'sand',
+                           TEXTURE_CODE == 'LP'     ~ 'peat',
+                           TEXTURE_CODE == 'LS'     ~ 'sand',
+                           TEXTURE_CODE == 'LSY'    ~ 'loam',
+                           TEXTURE_CODE == 'MC'     ~ 'clay',
+                           TEXTURE_CODE == 'MCFS'   ~ 'clay',
+                           TEXTURE_CODE == 'MCS'    ~ 'clay',
+                           TEXTURE_CODE == 'MCZ'    ~ 'clay',
+                           TEXTURE_CODE == 'MHC'    ~ 'clay',
+                           TEXTURE_CODE == 'MHCFS'  ~ 'clay',
+                           TEXTURE_CODE == 'MHCS'   ~ 'clay',
+                           TEXTURE_CODE == 'MS'     ~ 'sand',
+                           TEXTURE_CODE == 'MSC'    ~ 'clay',
+                           TEXTURE_CODE == 'MSCL'   ~ 'loam',
+                           TEXTURE_CODE == 'S'      ~ 'sand',
+                           TEXTURE_CODE == 'SC'     ~ 'clay',
+                           TEXTURE_CODE == 'SCL'    ~ 'loam',
+                           TEXTURE_CODE == 'SCLFS'  ~ 'loam',
+                           TEXTURE_CODE == 'SHC'    ~ 'clay',
+                           TEXTURE_CODE == 'SL'     ~ 'loam',
+                           TEXTURE_CODE == 'SLC'    ~ 'clay',
+                           TEXTURE_CODE == 'SLMC'   ~ 'clay',
+                           TEXTURE_CODE == 'SLZ'    ~ 'loam',
+                           TEXTURE_CODE == 'SMC'    ~ 'clay',
+                           TEXTURE_CODE == 'SMHC'   ~ 'clay',
+                           TEXTURE_CODE == 'SP'     ~ 'peat',
+                           TEXTURE_CODE == 'SS'     ~ 'sand',
+                           TEXTURE_CODE == 'ST'     ~ 'gravel',
+                           TEXTURE_CODE == 'ZC'     ~ 'clay',
+                           TEXTURE_CODE == 'ZCL'    ~ 'clay loam',
+                           TEXTURE_CODE == 'ZHC'    ~ 'clay',
+                           TEXTURE_CODE == 'ZL'     ~ 'loam',
+                           TEXTURE_CODE == 'ZLC'    ~ 'clay',
+                           TEXTURE_CODE == 'ZLCFS'  ~ 'clay',
+                           TEXTURE_CODE == 'ZLMC'   ~ 'clay',
+                           TEXTURE_CODE == 'ZLMCS'  ~ 'clay',
+                           TEXTURE_CODE == 'ZMC'    ~ 'clay',
+                           TEXTURE_CODE == 'ZMHC'   ~ 'clay',
+                           TRUE ~ NA_character_)) %>% 
+  mutate(GROUP = factor(GROUP, levels = c('gravel', 'sand', 'peat', 'loam',
+                                          'clay loam', 'clay'), 
+                        ordered = TRUE))
+```
+
+### Level 2
+
+  * Gravel: no subdivision
+  * Sand: clayey sand, loamy sand, sand
+  * Peat: Minerally, not
+  * Loam: sandy clay loam, loam, sandy loam, silty loam
+  * Clay loam: sandy, silty, not
+  * Clay: Light, light medium, medium, medium heavy, heavy 
+  
+```{r grp2spl}
+# note putting unspecified clays like "coarse sandy clay CSC" in with LC group
+# based on mapping across from Northcote
+
+tc_ranks <- tc_ranks %>% 
+  mutate(GROUP_2 = 
+           case_when(GROUP == 'gravel' ~ 'gravel',
+                     GROUP == 'sand' & 
+                       TEXTURE_CODE %in% c('CFS', 'CKS', 'CS') ~ 'clayey sand',
+                     GROUP == 'sand' & 
+                       TEXTURE_CODE %in% c('LMS', 'LS', 'LKS', 'LFS') ~ 'loamy sand',
+                     GROUP == 'sand' &
+                       TEXTURE_CODE %in% c('S', 'SS', 'MS', 'FS', 'KS', 'KSS') ~ 'sand',
+                     GROUP == 'peat' &
+                       TEXTURE_CODE %in% c('CP', 'LP', 'SP') ~ 'mineral peat',
+                     GROUP == 'peat' & 
+                       TEXTURE_CODE %in% c('GP', 'IP', 'HP', 'AP') ~ 'peat',
+                     GROUP == 'loam' &
+                       TEXTURE_CODE %in% c('ZL') ~ 'silty loam',
+                     GROUP == 'loam' &
+                       TEXTURE_CODE %in% c('SL', 'SLZ', 'KSL', 'FSL', 'FSLZ') ~ 'sandy loam',
+                     GROUP == 'loam' &
+                       TEXTURE_CODE %in% c('FSCL', 'FSCLZ', 'KSCL', 'MSCL', 
+                                           'SCL', 'SCLFS') ~ 'sandy clay loam',
+                     GROUP == 'loam' &
+                       TEXTURE_CODE %in% c('L', 'LFSY', 'LFSYZ', 'LSY') ~ 'loam',
+                     GROUP == 'clay loam' &
+                       TEXTURE_CODE %in% c('ZCL', 'CLZ') ~ 'clay loam, silty',
+                     GROUP == 'clay loam' &
+                       TEXTURE_CODE %in% c('CL') ~ 'clay loam',
+                     GROUP == 'clay loam' &
+                       TEXTURE_CODE %in% c('CLFS', 'CLFSZ', 'CLKS', 'CLMS', 'CLS') ~ 'clay loam, sandy',
+                     GROUP == 'clay' &
+                       TEXTURE_CODE %in% c('FSLC', 'FSLCZ', 'KSLC', 'LC', 
+                                           'LCFS', 'LCKS', 'LCS', 'LCZ', 'SLC', 
+                                           'ZLC', 'ZLCFS',
+                                           # Northcote (?!?):
+                                           'CSC', 'FSC', 'KSC', 'MSC', 'SC', 'ZC') ~ 'light clay',
+                     GROUP == 'clay' & 
+                       TEXTURE_CODE %in% c('FSLMC', 'KSLMC', 'LMC', 'LMCFS', 
+                                           'LMCKS', 'LMCS', 'LMCZ', 'SLMC',
+                                           'ZLMC', 'ZLMCS') ~ 'light medium clay',
+                     
+                     GROUP == 'clay' &
+                       TEXTURE_CODE %in% c('FSMC', 'KSMC', 'MC', 'MCFS', 'MCS',
+                                           'MCZ', 'SMC', 'ZMC') ~ 'medium clay',
+                     GROUP == 'clay' &
+                       TEXTURE_CODE %in% c('FSMHC', 'KSMHC', 'MHC', 'MHCFS', 
+                                           'MHCS', 'SMHC', 'ZMHC') ~ 'medium heavy clay',
+                     GROUP == 'clay' &
+                       TEXTURE_CODE %in% c('FSHC', 'HC', 'KSHC', 'SHC', 'ZHC') ~ 'heavy clay',
+                     TRUE ~ NA_character_
+                     )) %>% 
+  mutate(GROUP_2 = factor(GROUP_2,
+                          levels = c('gravel', 
+                                     'sand', 'loamy sand', 'clayey sand',
+                                     'peat', 'mineral peat', 
+                                     'sandy loam', 'loam', 'silty loam', 'sandy clay loam',
+                                     'clay loam, sandy', 'clay loam, silty', 'clay loam',
+                                     'light clay', 'light medium clay', 'medium clay', 
+                                     'medium heavy clay', 'heavy clay'), 
+                        ordered = TRUE)) %>% 
+  arrange(GROUP, GROUP_2)
+
+```
+
+### Group 3
+
+  * Gravel: no subdivision
+  * Sand: coarse, medium, fine
+  * Loamy sand: coarse, medium, fine
+  * Clayey sand: coarse, medium, fine
+  * Peat: fibric, hemic, sapric  mapped to coarse, medium, fine. Granular is a wierd one - highly decomposed but agg'd to 1-2mm particle size, but would have to act differently to a sand at FC. Lumping with fibric for now.
+  * Mineral Peat: sandy, loamy ,clayey mapped to coarse, medium, fine.
+  * Sandy loam: coarse, medium, fine 
+  * Loam: loam , medium sandy, fine sandy
+  * Silty loam: no subdividision
+  * Sandy Clay Loam: coarse, medium, fine
+  * Clay loam: coarse, medium, fine
+  * Clay loam, silty: no subsivision
+  * clay loam: no subdivision
+  * clays : coarse, medium, fine sandy, silty, no modifier
+  
+These start to look a lot like the DESCRIPTION field.
+  
+```{r grp3spl}
+tc_ranks <- tc_ranks %>% 
+  mutate(GROUP_3 = 
+           case_when(GROUP_2 == 'gravel' ~ 'gravel',
+                     GROUP_2 == 'sand' &
+                       TEXTURE_CODE %in% c('KS', 'KSS') ~ 'sand, coarse',
+                     GROUP_2 == 'sand' &
+                       TEXTURE_CODE %in% c('MS', 'S', 'SS') ~ 'sand, medium',
+                     GROUP_2 == 'sand' &
+                       TEXTURE_CODE %in% c('FS') ~ 'sand, fine',
+                     GROUP_2 == 'loamy sand' &
+                       TEXTURE_CODE %in% c('LKS') ~ 'loamy sand, coarse',
+                     GROUP_2 == 'loamy sand' &
+                       TEXTURE_CODE %in% c('LS' ,'LMS') ~ 'loamy sand, medium',
+                     GROUP_2 == 'loamy sand' &
+                       TEXTURE_CODE %in% c('LFS') ~ 'loamy sand, fine',
+                     GROUP_2 == 'clayey sand' &
+                       TEXTURE_CODE == 'CKS' ~ 'clayey sand, coarse',
+                     GROUP_2 == 'clayey sand' &
+                       TEXTURE_CODE == 'CS' ~ 'clayey sand, medium',
+                     GROUP_2 == 'clayey sand' &
+                       TEXTURE_CODE == 'CFS' ~ 'clayey sand, fine',
+                     GROUP_2 == 'peat' &
+                       TEXTURE_CODE %in% c('GP', 'IP') ~ 'peat, coarse',
+                     GROUP_2 == 'peat' &
+                       TEXTURE_CODE == 'HP' ~ 'peat, medium',
+                     GROUP_2 == 'peat' &
+                       TEXTURE_CODE == 'AP' ~ 'peat, fine',
+                     GROUP_2 == 'mineral peat' &
+                       # don't like these three...
+                       TEXTURE_CODE == 'SP' ~ 'mineral peat, coarse',
+                     GROUP_2 == 'mineral peat' &
+                       TEXTURE_CODE == 'LP' ~ 'mineral peat, medium',
+                     GROUP_2 == 'mineral peat' &
+                       TEXTURE_CODE == 'CP' ~ 'mineral peat, fine',
+                     GROUP_2 == 'sandy loam' &
+                       TEXTURE_CODE %in% c('KSL') ~ 'sandy loam, coarse',
+                     GROUP_2 == 'sandy loam' &
+                       TEXTURE_CODE %in% c('SL')  ~ 'sandy loam, medium',
+                     GROUP_2 == 'sandy loam' &
+                       TEXTURE_CODE %in% c('FSL', 'FSLZ', 'SLZ') ~ 'sandy loam, fine',
+                     GROUP_2 == 'loam' &
+                       TEXTURE_CODE %in% c('L') ~ 'loam',
+                     GROUP_2 == 'loam' &
+                       TEXTURE_CODE %in% c('LFSY', 'LFSYZ') ~ 'loam, sandy, fine',
+                     GROUP_2 == 'loam' &
+                       TEXTURE_CODE %in% c('LSY') ~ 'loam, sandy',
+                     GROUP_2 == 'silty loam' ~ 'silty loam',
+                     GROUP_2 == 'sandy clay loam' &
+                       TEXTURE_CODE %in% c('KSCL') ~ 'sandy clay loam, coarse',
+                     GROUP_2 == 'sandy clay loam' &
+                       TEXTURE_CODE %in% c('MSCL', 'SCL') ~ 'sandy clay loam, medium',
+                     GROUP_2 == 'sandy clay loam' &
+                       TEXTURE_CODE %in% c('FSCL', 'FSCLZ', 'SCLFS') ~ 'sandy clay loam, fine',
+                     GROUP_2 == 'clay loam, sandy' &
+                       TEXTURE_CODE %in% c('CLKS') ~ 'clay loam, sandy, coarse',
+                     GROUP_2 == 'clay loam, sandy' &
+                       TEXTURE_CODE %in% c('CLMS', 'CLS')  ~ 'clay loam, sandy, medium',
+                     GROUP_2 == 'clay loam, sandy' &
+                       TEXTURE_CODE %in% c('CLFS', 'CLFSZ') ~ 'clay loam, sandy, fine',
+                     GROUP_2 == 'clay loam, silty' ~ 'clay loam, silty',
+                     GROUP_2 == 'clay loam' ~ 'clay loam',
+                     GROUP_2 == 'light clay' &
+                       TEXTURE_CODE %in% c('CSC', 'KSC', 'KSLC', 'LCKS') ~ 'light clay, sandy, coarse',
+                     GROUP_2 == 'light clay' &
+                       TEXTURE_CODE %in% c('LCS', 'SC', 'SLC', 'MSC') ~ 'light clay, sandy, medium',
+                     GROUP_2 == 'light clay' &
+                       TEXTURE_CODE %in% c('FSC', 'FSLC', 'LCFS') ~ 'light clay, sandy, fine',
+                     GROUP_2 == 'light clay' &
+                       TEXTURE_CODE %in% c('LCZ', 'ZC', 'ZLC') ~ 'light clay, silty',
+                     GROUP_2 == 'light clay' &
+                       TEXTURE_CODE %in% c('LC', 'ZLCFS', 'FSLCZ') ~ 'light clay', # putting the 'I can't make up my mind' codes in here but that needs checking
+                     GROUP_2 == 'light medium clay' &
+                       TEXTURE_CODE %in% c('KSLMC', 'LMCKS') ~  'light medium clay, sandy, coarse',
+                     GROUP_2 == 'light medium clay' &
+                       TEXTURE_CODE %in% c('LMCS', 'SLMC') ~  'light medium clay, sandy, medium',
+                     GROUP_2 == 'light medium clay' &
+                       TEXTURE_CODE %in% c('FSLMC', 'LMCFS') ~  'light medium clay, sandy, fine',
+                     GROUP_2 == 'light medium clay' &
+                       TEXTURE_CODE %in% c('LMCZ', 'ZLMC') ~  'light medium clay, silty',
+                     GROUP_2 == 'light medium clay' &
+                       TEXTURE_CODE %in% c('LMC', 'ZLMCS') ~  'light medium clay',
+                     GROUP_2 == 'medium clay' &
+                       TEXTURE_CODE %in% c('KSMC') ~ 'medium clay, sandy, coarse',
+                     GROUP_2 == 'medium clay' &
+                       TEXTURE_CODE %in% c('MCS', 'SMC') ~ 'medium clay, sandy, medium',
+                     GROUP_2 == 'medium clay' &
+                       TEXTURE_CODE %in% c('FSMC', 'MCFS') ~ 'medium clay, sandy, fine',
+                     GROUP_2 == 'medium clay' &
+                       TEXTURE_CODE %in% c('MCZ', 'ZMC') ~ 'medium clay, silty',
+                     GROUP_2 == 'medium clay' &
+                       TEXTURE_CODE %in% c('MC') ~ 'medium clay',
+                     GROUP_2 == 'medium heavy clay' &
+                       TEXTURE_CODE %in% c('KSMHC') ~ 'medium heavy clay, sandy, coarse',
+                     GROUP_2 == 'medium heavy clay' &
+                       TEXTURE_CODE %in% c('MHCS', 'SMHC') ~ 'medium heavy clay, sandy, medium',
+                     GROUP_2 == 'medium heavy clay' &
+                       TEXTURE_CODE %in% c('FSMHC', 'MHCFS') ~ 'medium heavy clay, sandy, fine',
+                     GROUP_2 == 'medium heavy clay' &
+                       TEXTURE_CODE %in% c('ZMHC') ~ 'medium heavy clay, silty',
+                     GROUP_2 == 'medium heavy clay' &
+                       TEXTURE_CODE %in% c('MHC') ~ 'medium heavy clay',
+                     GROUP_2 == 'heavy clay' &
+                       TEXTURE_CODE %in% c('KSHC') ~ 'heavy clay, sandy, coarse',
+                     GROUP_2 == 'heavy clay' &
+                       TEXTURE_CODE %in% c('SHC') ~ 'heavy clay, sandy, medium',
+                     GROUP_2 == 'heavy clay' &
+                       TEXTURE_CODE %in% c('FSHC') ~ 'heavy clay, sandy, fine',
+                     GROUP_2 == 'heavy clay' &
+                       TEXTURE_CODE %in% c('ZHC') ~ 'heavy clay, silty',
+                     GROUP_2 == 'heavy clay' &
+                       TEXTURE_CODE %in% c('HC') ~ 'heavy clay',
+                     TRUE ~ NA_character_)) %>% 
+  mutate(GROUP_3 = 
+           factor(GROUP_3, 
+                  levels = 
+                    c('gravel', 
+                      'sand, coarse', 'sand, medium', 'sand, fine',
+                      'loamy sand, coarse', 'loamy sand, medium', 'loamy sand, fine',
+                      'clayey sand, coarse', 'clayey sand, medium', 'clayey sand, fine',
+                      'peat, coarse', 'peat, medium', 'peat, fine',
+                      'mineral peat, coarse', 'mineral peat, medium','mineral peat, fine',
+                      'sandy loam, coarse', 'sandy loam, medium', 'sandy loam, fine',
+                      'loam, sandy', 'loam, sandy, fine', 'loam', 'silty loam',
+                      'sandy clay loam, coarse', 'sandy clay loam, medium', 'sandy clay loam, fine',
+                      'clay loam, sandy, coarse', 'clay loam, sandy, medium', 'clay loam, sandy, fine',
+                      'clay loam, silty', 'clay loam', 
+                      'light clay, sandy, coarse', 'light clay, sandy, medium', 'light clay, sandy, fine',
+                      'light clay, silty', 'light clay', 
+                      'light medium clay, sandy, coarse', 'light medium clay, sandy, medium',
+                      'light medium clay, sandy, fine', 'light medium clay, silty',
+                      'light medium clay', 
+                      'medium clay, sandy, coarse', 'medium clay, sandy, medium',
+                      'medium clay, sandy, fine', 'medium clay, silty',
+                      'medium clay', 
+                      'medium heavy clay, sandy, coarse', 'medium heavy clay, sandy, medium',
+                      'medium heavy clay, sandy, fine', 'medium heavy clay, silty',
+                      'medium heavy clay', 
+                      'heavy clay, sandy, coarse', 'heavy clay, sandy, medium',
+                      'heavy clay, sandy, fine', 'heavy clay, silty',
+                      'heavy clay'),
+                  ordered = TRUE)) %>% 
+    arrange(GROUP_3)
+
+```
+
+### Group 4
+
+Group 4 rankings account for texture qualifiers, so these have to be re-joined.
+
+In terms of overall 'lightness', the qualifiers induce an internal ranking of 
+
+   * light < sapric < normal < fibric < heavy 
+   
+(subject to checking, but it makes sense to me...).
+
+```{r grp4}
+tc_group4 <- 
+  left_join(all_tcs, tc_ranks, by = c('TEXTURE_CODE', 'DESCRIPTION')) %>% 
+  mutate(GROUP_4 =
+           case_when(TEXTURE_QUALIFIER == '-' & GROUP != 'clay' ~ 
+                       paste0('light ', as.character(GROUP_3)),
+                     TEXTURE_QUALIFIER == '+' & GROUP != 'clay' ~ 
+                       paste0('heavy ', as.character(GROUP_3)),
+                     TEXTURE_QUALIFIER == 'A' ~ paste0('sapric ', as.character(GROUP_3)),
+                     TEXTURE_QUALIFIER == 'I' ~ paste0('fibric ', as.character(GROUP_3)),
+                     TRUE ~ as.character(GROUP_3)),
+         # fix where stupid
+         GROUP_4 = case_when(GROUP_4 == 'sapric peat, fine' ~ 'peat, fine',
+                             GROUP_4 == 'fibric peat, coarse' ~ 'peat, coarse',
+                             GROUP_4 == 'fibric peat, medium' ~ 'peat, medium',
+                             GROUP_4 == 'heavy gravel' ~ 'gravel',
+                             GROUP_4 == 'light gravel' ~ 'gravel',
+                             TRUE ~ GROUP_4)) %>% 
+  filter(!is.na(TEXTURE_CODE)) %>% 
+  mutate(
+    GROUP_4 = 
+      factor(GROUP_4, 
+             levels = 
+               c('gravel', 
+                 'light sand, coarse','sapric sand, coarse', 'sand, coarse',
+                 'fibric sand, coarse', 'heavy sand, coarse',
+                 'light sand, medium', 'sapric sand, medium', 'sand, medium',
+                 'fibric sand, medium', 'heavy sand, medium',
+                 'light sand, fine', 'sand, fine', 'fibric sand, fine', 'heavy sand, fine',
+                 'light loamy sand, coarse', 'sapric loamy sand, coarse', 'loamy sand, coarse',
+                 'heavy loamy sand, coarse',
+                 'light loamy sand, medium', 'sapric loamy sand, medium', 'loamy sand, medium',
+                 'fibric loamy sand, medium', 'heavy loamy sand, medium',
+                 'light loamy sand, fine', 'sapric loamy sand, fine', 'loamy sand, fine',
+                 'fibric loamy sand, fine', 'heavy loamy sand, fine',
+                 'light clayey sand, coarse', 'sapric clayey sand, coarse', 'clayey sand, coarse',
+                 'fibric clayey sand, coarse', 'heavy clayey sand, coarse',
+                 'light clayey sand, medium', 'sapric clayey sand, medium', 'clayey sand, medium',
+                 'fibric clayey sand, medium', 'heavy clayey sand, medium',
+                 'light clayey sand, fine', 'clayey sand, fine', 'heavy clayey sand, fine',
+                 'peat, coarse', 'peat, medium', 'peat, fine',
+                 'mineral peat, coarse', 'mineral peat, medium', 'mineral peat, fine',
+                 'light sandy loam, coarse', 'sapric sandy loam, coarse', 'sandy loam, coarse',
+                 'fibric sandy loam, coarse', 'heavy sandy loam, coarse',
+                 'light sandy loam, medium', 'sapric sandy loam, medium', 'sandy loam, medium',
+                 'fibric sandy loam, medium', 'heavy sandy loam, medium',
+                 'light sandy loam, fine', 'sapric sandy loam, fine', 'sandy loam, fine',
+                 'fibric sandy loam, fine','heavy sandy loam, fine',
+                 'light loam, sandy', 'loam, sandy', 'heavy loam, sandy',
+                 'light loam, sandy, fine', 'loam, sandy, fine', 'fibric loam, sandy, fine',
+                 'heavy loam, sandy, fine',
+                 'light loam', 'sapric loam', 'loam', 'fibric loam', 'heavy loam',
+                 'light silty loam', 'sapric silty loam', 'silty loam', 
+                 'fibric silty loam', 'heavy silty loam',
+                 'light sandy clay loam, coarse', 'sapric sandy clay loam, coarse', 'sandy clay loam, coarse',
+                 'fibric sandy clay loam, coarse', 'heavy sandy clay loam, coarse',
+                 'light sandy clay loam, medium', 'sapric sandy clay loam, medium', 'sandy clay loam, medium',
+                 'fibric sandy clay loam, medium', 'heavy sandy clay loam, medium',
+                 'light sandy clay loam, fine', 'sapric sandy clay loam, fine', 'sandy clay loam, fine', 
+                 'fibric sandy clay loam, fine', 'heavy sandy clay loam, fine',
+                 'light clay loam, sandy, coarse', 'sapric clay loam, sandy, coarse',
+                   'clay loam, sandy, coarse', 'fibric clay loam, sandy, coarse', 
+                   'heavy clay loam, sandy, coarse',
+                 'light clay loam, sandy, medium', 'sapric clay loam, sandy, medium',
+                   'clay loam, sandy, medium', 'fibric clay loam, sandy, medium', 
+                   'heavy clay loam, sandy, medium',
+                 'light clay loam, sandy, fine', 'sapric clay loam, sandy, fine',
+                   'clay loam, sandy, fine', 'fibric clay loam, sandy, fine', 
+                   'heavy clay loam, sandy, fine',
+                 'light clay loam, silty', 'sapric clay loam, silty',
+                   'clay loam, silty', 'fibric clay loam, silty', 'heavy clay loam, silty',
+                 'light clay loam', 'sapric clay loam', 'clay loam', 'fibric clay loam',
+                   'heavy clay loam',
+                 'sapric light clay, sandy, coarse', 'light clay, sandy, coarse', 
+                   'fibric light clay, sandy, coarse',
+                 'sapric light clay, sandy, medium', 'light clay, sandy, medium', 
+                   'fibric light clay, sandy, medium',
+                 'sapric light clay, sandy, fine', 'light clay, sandy, fine', 
+                   'fibric light clay, sandy, fine',
+                 'sapric light clay, silty', 'light clay, silty', 'fibric light clay, silty',
+                 'sapric light clay', 'light clay', 'fibric light clay',
+                 'light medium clay, sandy, coarse',
+                 'sapric light medium clay, sandy, medium', 'light medium clay, sandy, medium',
+                 'fibric light medium clay, sandy, medium',
+                 'sapric light medium clay, sandy, fine', 'light medium clay, sandy, fine',
+                 'fibric light medium clay, sandy, fine',
+                 'sapric light medium clay, silty', 'light medium clay, silty',
+                 'fibric light medium clay, silty',
+                 'sapric light medium clay', 'light medium clay', 'fibric light medium clay',
+                 'medium clay, sandy, coarse', 'fibric medium clay, sandy, coarse',
+                 'sapric medium clay, sandy, medium', 'medium clay, sandy, medium',
+                 'fibric medium clay, sandy, medium',
+                 'medium clay, sandy, fine', 'fibric medium clay, sandy, fine',
+                 'sapric medium clay, silty', 'medium clay, silty',
+                 'fibric medium clay, silty',
+                 'sapric medium clay', 'medium clay', 'fibric medium clay',
+                 'medium heavy clay, sandy, coarse', 'medium heavy clay, sandy, medium',
+                 'medium heavy clay, sandy, fine', 'medium heavy clay, silty', 
+                 'fibric medium heavy clay, silty',
+                 'sapric medium heavy clay', 'medium heavy clay', 'fibric medium heavy clay',
+                 'heavy clay, sandy, coarse', 'heavy clay, sandy, medium', 'heavy clay, sandy, fine',
+                 'heavy clay, silty', 'fibric heavy clay, silty',
+                 'sapric heavy clay', 'heavy clay', 'fibric heavy clay'),
+             ordered = TRUE),
+    FINE_RANK = as.integer(GROUP_4), 
+    TQ_FCT = case_when(is.na(TEXTURE_QUALIFIER) ~ 'N',
+                       TRUE ~ TEXTURE_QUALIFIER),
+    TQ_FCT = factor(TQ_FCT, levels = c('-', 'A', 'N', 'I', '+'), ordered = TRUE),
+    TQ_FCT = as.integer(TQ_FCT)) %>% 
+  arrange(GROUP_3, TQ_FCT) %>% 
+  mutate(FINAL_RANK = seq(nrow(.)))
+
+all_tc_ranked <- all_tcs %>% 
+  filter(!is.na(TEXTURE_CODE)) %>% 
+  select(TEXTURE, TEXTURE_CODE, TEXTURE_QUALIFIER, DESCRIPTION) %>% 
+  left_join(tc_group4, by = c('TEXTURE_CODE', 'TEXTURE_QUALIFIER', 'DESCRIPTION')) %>% 
+  filter(!is.na(TEXTURE_CODE)) %>% 
+  dplyr::select(TEXTURE, TEXTURE_CODE, TEXTURE_QUALIFIER, DESCRIPTION,
+                GROUP, GROUP_2, GROUP_3, GROUP_4, N_CODES, FINAL_RANK) %>% 
+  rename(GROUP_1 = GROUP) %>% 
+  arrange(FINAL_RANK) 
+
+write_csv(all_tc_ranked, file.path(getwd(), 'helpers', 'SALI_TEXTURES_RANKED.csv'))
+
+
+```
+
+***
+
+Field texture measures the behaviour of a small volume of soil at field capacity. The Yellow Book notes correctly that texture doesn't map neatly to PSA (which notably excludes +2mm size fractions and ignores the influence of organic matter, sesquioxides, etc on soil physical behaviour). However, texture codes are qualitatively defined using references to particle size fractions and are roughly mapped to the texture triangle, so PSA data can potentially be used to sanity-check these rankings. That said, not all PSA data makes sense next to texture codes, for instance there are some sand group PSAs with 60% clay. 
+
+While the Yellow Book says not to adjust texture codes in the face of PSA data, that's a sentence that doesn't account for actual errors in a database. Its trying to make the point that PSA measurements and physical soil behaviour aren't necessarily tightly linked (e.g. in subplastic soils) and that the surveyor should trust their perceptions. 
+
+As such, we can draw some graphs and have a think, but that's about all.
+
+So, now to extract PSA data from SALI and generate stats for Clay, Silt, Fine Sand, and Coarse Sand fractions. There's data in SALI from multiple PSA lab methods, but by far the bulk of it is in the four codes below so I'll focus on that for now.
+
+```{r tex_v_psa}
+tex_psa <- 
+  dbGetQuery(SALI, 
+  "select project_code, site_id, obs_no, horizon_no, sample_no, texture_code || texture_qualifier as texture,
+     lab_meth_code, numeric_value, raw_value, result_status
+   from sit_horizons
+   left outer join sit_samples using (project_code, site_id, obs_no, horizon_no)
+   left outer join 
+     (select * from sit_lab_results 
+       where lab_meth_code in('2Z2_Clay', '2Z2_Silt', '2Z2_FS', '2Z2_CS')) psa 
+         using(project_code, site_id, obs_no, horizon_no, sample_no)
+   where result_status in ('A', 'BQ')
+   order by project_code, site_id, obs_no, horizon_no, sample_no")
+```
+
+`r nrow(tex_psa)` analytical results to mess about with.
+
+There's a few things to tidy up.
+
+```{r rn}
+# r doesn't like variables starting with numbers too much
+tex_psa$LAB_METH_CODE <- gsub('2Z2_', 'PSA_', tex_psa$LAB_METH_CODE)
+```
+
+All the samples with numeric value NA and raw value 0 can be set to 0.
+
+```{r textidy1}
+tex_psa$NUMERIC_VALUE[which(tex_psa$RAW_VALUE == 0 & 
+                              is.na(tex_psa$NUMERIC_VALUE))] <- 0
+```
+
+Same goes for BQ samples where raw value is 0 and numeric value disagrees, e.g. samples in CBW 288.
+
+```{r textidy2}
+tex_psa$NUMERIC_VALUE[which(tex_psa$RAW_VALUE == 0 & tex_psa$NUMERIC_VALUE > 10 &
+                             tex_psa$RESULT_STATUS == 'BQ')] <- 0
+```
+
+BVL 9017 sample 2 has a fine sand amount of 173%, which is pretty clearly a decimal place error. At 17.3%, the PSA fractions for that sample add up to a sensible 97.3%.
+
+```{r textidy3}
+tex_psa$NUMERIC_VALUE[which(tex_psa$NUMERIC_VALUE == 173)] <- 0
+```
+
+Other errors won't be apparent until the data is wide-formatted and total PSA values checked. Any that don't add up to between 95 and 105% are suspect.
+
+```{R psaw}
+tex_psa_totals <- tex_psa %>% 
+  dplyr::select(-RAW_VALUE, -RESULT_STATUS) %>% 
+  group_by(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, SAMPLE_NO, TEXTURE) %>% 
+  summarise(TOTAL_PSA = sum(NUMERIC_VALUE, na.rm = TRUE),
+            N_COMP    = sum(!is.na(NUMERIC_VALUE)))
+
+tex_psa_wide <- tex_psa %>% 
+  dplyr::select(-RAW_VALUE, -RESULT_STATUS) %>% 
+  pivot_wider(names_from = LAB_METH_CODE, values_from = NUMERIC_VALUE)  
+
+tex_psa_wide <- left_join(tex_psa_wide, tex_psa_totals, 
+                          by = c('PROJECT_CODE' , 'SITE_ID', 'OBS_NO', 
+                                 'HORIZON_NO', 'SAMPLE_NO', 'TEXTURE'))
+```
+
+`r dplyr::filter(tex_psa_totals, PSA_TOTAL > 105) %>% nrow()` results total over 105%. Its immediately apparent that many have duplicated data in two PSA size fractions, e.g.:
+
+```{r toobigdup}
+dplyr::filter(tex_psa_wide, TOTAL_PSA > 105) %>%
+  arrange(desc(TOTAL_PSA)) %>% 
+  select(TEXTURE, matches('^PSA_'), TOTAL_PSA) %>%
+           head()
+```
+
+These can only be resolved manually with reference to full descriptions, and even then it can be hard to tell what to do. For the purposes of this ranking exercise, I'm just going to filter out anything that totals over 105%.
+
+A similar issue exists for samples that total less than 95% (n = `r dplyr::filter(tex_psa_wide, PSA_TOTAL < 95) %>% nrow()`):
+
+```{r toolowdup}
+dplyr::filter(tex_psa_wide, TOTAL_PSA < 95) %>% 
+  select(TEXTURE, matches('^PSA_'), TOTAL_PSA) %>%
+           head()
+```
+
+Some are missing data (particularly in the sand fractions), a few add to 0, and the rest are just a bit weird. They can go as well (note: this data is already in a queue to be corrected, behind a long line of other tasks). 
+
+Along with removing samples from horizons without a texture code, and samples with too many missing components, and a couple of dud texture codes,
+
+```{r tidy}
+tex_psa_clean <- tex_psa_wide %>%
+  dplyr::filter(TOTAL_PSA <= 105) %>% 
+  dplyr::filter(TOTAL_PSA >= 95) %>%
+  dplyr::filter(N_COMP > 2) %>% 
+  dplyr::filter(!is.na(TEXTURE)) %>% 
+  dplyr::filter(!(TEXTURE %in% c('-', '+'))) %>% 
+  mutate_at(vars(matches('^PSA_')), replace_na, 0) 
+
+# per above, remaining NAs are almost certainly legit 0s e.g. no clay measured
+# on a coarse sand texture sample
+```
+
+`r nrow(tex_psa_clean)` data points remain. Good enough to go on with.
+
+It's still kind of hard to rank this data. McNeill (2018) contains some treatments for mapping ternary PSA data back to a cartesian space, removing the structural correlation that comes from all the fractions having to add to 100%. These might help. A 'Not_Clay' percentage may also be useful. 
+
+```{r hmmm}
+tex_psa_norm <- tex_psa_clean %>% 
+  # first normalise
+  mutate_at(vars(matches('^PSA_')), function(x)  {x / .$TOTAL_PSA * 100 } ) %>% 
+  rowwise() %>% 
+  mutate(Not_Clay = sum(c(PSA_Silt, PSA_FS, PSA_CS)),
+         TOTAL_PSA = sum(c(PSA_Clay, PSA_Silt, PSA_FS, PSA_CS))) %>% 
+  ungroup() %>% 
+  mutate_at(vars(matches('^PSA_'), TOTAL_PSA), round) %>% 
+  select(-N_COMP) %>% 
+  # now calc w1 and w2
+  rowwise() %>% 
+  mutate(W1 = (2 * sum(c(PSA_FS, PSA_CS))) - PSA_Silt - PSA_Clay,
+         W2 = PSA_Silt - PSA_Clay) %>% 
+  ungroup() %>% 
+  arrange(W1, W2)
+  
+```
+
+With this dataset, some summary statistics can be calculated by texture code:
+
+```{r cleansum}
+texcode_stats <- tex_psa_norm %>% 
+  group_by(TEXTURE) %>% 
+  summarise(Q16_CLAY = round(quantile(PSA_Clay, 0.159, na.rm = TRUE), 1),
+            MED_CLAY = round(median(PSA_Clay, na.rm = TRUE), 1),
+            Q84_CLAY = round(quantile(PSA_Clay, 0.841, na.rm = TRUE), 1),
+            Q16_SILT = round(quantile(PSA_Silt, 0.159, na.rm = TRUE), 1),
+            MED_SILT = round(median(PSA_Silt, na.rm = TRUE), 1),
+            Q84_SILT = round(quantile(PSA_Silt, 0.841, na.rm = TRUE), 1),
+            Q16_FSND = round(quantile(PSA_FS, 0.159, na.rm = TRUE), 1),
+            MED_FSND = round(median(PSA_FS, na.rm = TRUE), 1),
+            Q84_FSND = round(quantile(PSA_FS, 0.841, na.rm = TRUE), 1),
+            Q16_CSND = round(quantile(PSA_CS, 0.159, na.rm = TRUE), 1),
+            MED_CSND = round(median(PSA_CS, na.rm = TRUE), 1),
+            Q84_CSND = round(quantile(PSA_CS, 0.841, na.rm = TRUE), 1),
+            Q16_NCLY = round(quantile(Not_Clay, 0.159, na.rm = TRUE), 1),
+            MED_NCLY = round(median(Not_Clay, na.rm = TRUE), 1),
+            Q84_NCLY = round(quantile(Not_Clay, 0.841, na.rm = TRUE), 1),
+            Q16_W1   = round(quantile(W1, 0.159, na.rm = TRUE)),
+            MED_W1   = round(median(W1, na.rm = TRUE)),
+            Q84_W1   = round(quantile(W1, 0.841, na.rm = TRUE)),        
+            Q16_W2   = round(quantile(W2, 0.159, na.rm = TRUE)),
+            MED_W2   = round(median(W2, na.rm = TRUE)),
+            Q84_W2   = round(quantile(W2, 0.841, na.rm = TRUE)), 
+            N_CLAY   = sum(!is.na(PSA_Clay)),
+            N_SILT   = sum(!is.na(PSA_Silt)),
+            N_FSND   = sum(!is.na(PSA_FS)),
+            N_CSND   = sum(!is.na(PSA_CS))) %>% 
+  # rank sandiest to clayeyest
+  arrange(desc(MED_NCLY), MED_CLAY)
+
+stats_simple <- texcode_stats %>%  
+  dplyr::select(TEXTURE, MED_CLAY, MED_SILT, MED_FSND, MED_CSND,
+                MED_NCLY, MED_W1, MED_W2, N_CLAY) %>% 
+  mutate(MED_SUM = rowSums(select(., MED_CLAY, MED_NCLY)))
+
+write_csv(texcode_stats, file.path(getwd(), 'SALI_DATA', 'tex_psa_wide.csv'))
+write_csv(stats_simple, file.path(getwd(), 'SALI_DATA', 'tex_psa_simple.csv'))
+```
+
+At this point I can start to do some checks. First the major groups: are they in a sensible order?
+
+#### Group == Sand, by Group 2
+
+```{r dplot}
+S <- dplyr::filter(tc_group4, GROUP == 'sand') %>% 
+  left_join(tex_psa_norm, by = c('TEXTURE_CODE' = 'TEXTURE')) %>% 
+  dplyr::filter(TEXTURE_CODE != 'LMS') 
+ 
+ggplot(S) +
+  geom_density(aes(x = PSA_Clay, fill = GROUP_2, col = GROUP_2,
+                   group = GROUP_2), alpha = 0.1) +
+  theme_minimal()
+
+```
+
+#### Group == Loam, by Group 2
+
+```{r dplot}
+L <- dplyr::filter(tc_group4, GROUP == 'loam') %>% 
+  left_join(tex_psa_norm, by = c('TEXTURE_CODE' = 'TEXTURE')) 
+ 
+ggplot(L) +
+  geom_density(aes(x = PSA_Clay, fill = GROUP_3, col = GROUP_3,
+                   group = GROUP_3), alpha = 0.1) +
+  theme_minimal()
+```
+
+ok. Silty loam sticks out
+
+#### Group == Clay Loam, by Group 2
+
+```{r dplot}
+CL <- dplyr::filter(tc_group4, GROUP == 'clay loam') %>% 
+  left_join(tex_psa_norm, by = c('TEXTURE_CODE' = 'TEXTURE')) 
+ 
+ggplot(CL) +
+  geom_density(aes(x = PSA_CS, fill = GROUP_2, col = GROUP_2,
+                   group = GROUP_2), alpha = 0.1) +
+  theme_minimal()
+```
+
+
+####  Group == Clay, by Group 2
+
+```{r dplot}
+C <- dplyr::filter(tc_group4, GROUP == 'clay') %>% 
+  left_join(tex_psa_norm, by = c('TEXTURE_CODE' = 'TEXTURE')) 
+ 
+ggplot(C) +
+  geom_density(aes(x = PSA_Clay, fill = GROUP_2, col = GROUP_2,
+                   group = GROUP_2), alpha = 0.1) +
+  theme_minimal()
+```
+
+noooice
+
+
+```{r ternpl}
+library(soiltexture)
+library(ggtern)
+
+# plot MCs
+
+lmcs <- dplyr::filter(tex_psa_norm, TEXTURE == 'ZL') %>% 
+  rowwise() %>% 
+  mutate(SAND = sum(c(PSA_CS, PSA_FS), na.rm = TRUE)) %>% 
+  ungroup()
+
+ggtern(data = lmcs, 
+       aes(y = PSA_Clay, z = PSA_Silt, x = SAND,
+                        colour = PSA_Clay)) + geom_point(alpha = 0.25) 
+
+
+```
+
+PSAs are indeed all over the shop compared to the ranking, yikes.
