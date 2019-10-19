@@ -45,10 +45,10 @@ if(!dir.exists(file.path(getwd(), 'SALI_DATA'))) {
 
 ## Data snapshot
 
-Take a snapshot of relevant SALI tables to work with offline
+Take a snapshot of relevant SALI tables to work with offline:
 
 ```{r getdat}
-today <- '20190928' # edit for fresh snapshot
+today <- '20191018' # edit for fresh snapshot
 
 sit_datafile <- file.path(getwd(), 'SALI_DATA', 
                           paste0('SALI_SIT-data_', today, '.rds'))
@@ -66,7 +66,7 @@ if(file.exists(sit_datafile)) {
               and avail_status = 'E'
               )
              select * from temp1
-             left join sit_sites using (project_code)
+             inner join sit_sites using (project_code)
              order by project_code, site_id"),
       "OBS" = 
         dbGetQuery(SALI,
@@ -76,7 +76,7 @@ if(file.exists(sit_datafile)) {
               and avail_status = 'E'
               )
              select * from temp1
-             left join sit_observations using (project_code)
+             inner join sit_observations using (project_code)
              order by project_code, site_id, obs_no"),
       "LOC" = # grabbing all but SHAPE col, ROracle can't handle SDO_GEOM :(
         dbGetQuery(SALI,
@@ -89,7 +89,7 @@ if(file.exists(sit_datafile)) {
              zone, easting, northing, longitude, latitude, loc_accuracy, 
              created_by, creation_date, last_updated_by, last_update_date
              from temp1
-             left join sit_locations using (project_code)
+             inner join sit_locations using (project_code)
              where datum = 3
              and longitude > 1
              order by project_code, site_id, obs_no"),
@@ -101,7 +101,7 @@ if(file.exists(sit_datafile)) {
               and avail_status = 'E'
               )
              select * from temp1
-             left join sit_soil_classifications using (project_code)
+             inner join sit_soil_classifications using (project_code)
              order by project_code, site_id, obs_no, soil_class_no"), 
       "DIS" = 
         dbGetQuery(SALI,
@@ -111,7 +111,7 @@ if(file.exists(sit_datafile)) {
               and avail_status = 'E'
               )
              select * from temp1
-             left join sit_disturbances using (project_code)
+             inner join sit_disturbances using (project_code)
              order by project_code, site_id, obs_no, disturb_no"),
       "MIC" = 
         dbGetQuery(SALI,
@@ -121,7 +121,7 @@ if(file.exists(sit_datafile)) {
               and avail_status = 'E'
               )
              select * from temp1
-             left join sit_microreliefs using (project_code)
+             inner join sit_microreliefs using (project_code)
              order by project_code, site_id, obs_no, micro_no"),
       "SCF" =
         dbGetQuery(SALI,
@@ -131,7 +131,7 @@ if(file.exists(sit_datafile)) {
               and avail_status = 'E'
               )
              select * from temp1
-             left join sit_surf_coarse_frags using (project_code)
+             inner join sit_surf_coarse_frags using (project_code)
              order by project_code, site_id, obs_no, surf_frag_no"),
       "OTC" = 
         dbGetQuery(SALI,
@@ -141,7 +141,7 @@ if(file.exists(sit_datafile)) {
               and avail_status = 'E'
               )
              select * from temp1
-             left join sit_rock_outcrops using (project_code)
+             inner join sit_rock_outcrops using (project_code)
              order by project_code, site_id, obs_no, outcrop_no"),
       "HOR" = 
         dbGetQuery(SALI,
@@ -150,27 +150,34 @@ if(file.exists(sit_datafile)) {
               where site_qc_status = 'P'
               and avail_status = 'E'
               )
+             select hor.*, (texture_code || texture_qualifier) as texture from temp1
+             inner join sit_horizons hor on temp1.project_code = hor.project_code
+             order by hor.project_code, site_id, obs_no, horizon_no"),
+      "PAN" =
+        dbGetQuery(SALI,
+            "with temp1 as (
+              select project_code from reg_projects 
+              where site_qc_status = 'P'
+              and avail_status = 'E'
+              )
              select * from temp1
-             left join sit_horizons using (project_code)
-             order by project_code, site_id, obs_no, horizon_no")
-      # add horizon-level stuff later
+             inner join sit_pans using (project_code)
+             order by project_code, site_id, obs_no, horizon_no, pan_no")
+      # add more horizon-level stuff later
     )
-
   saveRDS(sit_data, sit_datafile)
 }
 
 ```
 
-
-
 ## Service structure
 
 Initial plans are to publish a two-layer web feature service with point geometry:
 
-  * Layer 1: Obs-level data, plus some profile summary information like depth to A
+  * Layer 1: Observation-level data, plus profile summary information like depth to A
   * Layer 2: Wide-formatted horizon data relevant to SLGA II modelling 
   
-Since the spec for SLGA II is not yet settled, the content of the layers is likely to change. 
+Since the spec for SLGA II is not yet settled, the content of the layers is likely to change. The ASRIS tech specs v1.6 will also be used to guide the service structure, particularly Table 52 (Recommended Minimum Dataset for the ASRIS profile database).
 
 ## Layer 1
 
@@ -180,10 +187,11 @@ Data is filtered to projects where `REG_PROJECTS.AVAIL_STATUS = 'E'` and `REG_PR
 
 ### Simple parameters 
 
-Simple parameters are those where only one record per site or per observation exists, so they're easy to query out:
+Simple parameters are those where only one record per site or per observation exists, so they're easy to query out in one go:
 
   * Observation date
   * Site and obs type, obs reason
+  * Land Use
   * Location coordinates
   * Location measurement method and EPE where known
   * Runoff, permeability and drainage classes
@@ -196,91 +204,91 @@ Where more than one soil classification exists on an observation, they usually r
 Tax unit codes are unlikely to be useful to the modelling as SPC-level data is not being used, so those are left out for now. Other parameters may also be dropped if their value proves low.
 
 ```{r layer_simple}
-l1_simple <- 
-  dbGetQuery(SALI, 
-             "select project_code, site_id, obs_no,
-               obs_date, site_type, obs_type,
-               longitude, latitude, loc_accuracy, loc_meas_method,
-               runoff, permeability, drainage, lith_code,
-               slope_eval_method, slope_pct, slope_class, slope_morph_type, 
-               elem_inc_slope, elem_type_code,
-               modal_slope, relief_class, rel_mod_slope_class, patt_type_code,
-               asc_confidence, asc_ord, subord_asc_code as asc_subord, 
-               great_group_asc_code as asc_great_group,
-               subgroup_asc_code as asc_subgroup,
-               asc_fam1, asc_fam2, asc_fam3, asc_fam4, asc_fam5, 
-               ppf, exhibit_gsg_code as gsg
-             from reg_projects
-             join sit_sites using (project_code)
-             join sit_observations using (project_code, site_id)
-             join sit_locations using (project_code, site_id, obs_no)
-             left outer join (select * from sit_soil_classifications 
-               where soil_class_no = 1) sc 
-                 using (project_code, site_id, obs_no)
-             where avail_status = 'E'
-             and site_qc_status = 'P'
-             and datum = 3
-             order by project_code, site_id, obs_no") %>% 
-  dplyr::filter(LONGITUDE > 1) # >:-(
+# some queries are still way more efficient in SQL *shrug*
+l1s_datafile <- file.path(getwd(), 'SALI_DATA', 
+                          paste0('l1_simple_', today, '.rds'))
+
+if(file.exists(l1s_datafile)) {
+  sit_data <- readRDS(l1s_datafile)
+} else {
+  l1_simple <- 
+    dbGetQuery(SALI, 
+               "select project_code, site_id, obs_no,
+                 obs_date, site_type, obs_type,
+                 longitude, latitude, loc_accuracy, loc_meas_method,
+                 runoff, permeability, drainage, lith_code, land_use_code,
+                 slope_eval_method, slope_pct, slope_class, slope_morph_type, 
+                 elem_inc_slope, elem_type_code,
+                 modal_slope, relief_class, rel_mod_slope_class, patt_type_code,
+                 asc_confidence, asc_ord, subord_asc_code as asc_subord, 
+                 great_group_asc_code as asc_great_group,
+                 subgroup_asc_code as asc_subgroup,
+                 asc_fam1, asc_fam2, asc_fam3, asc_fam4, asc_fam5, 
+                 ppf, exhibit_gsg_code as gsg
+               from reg_projects
+               join sit_sites using (project_code)
+               join sit_observations using (project_code, site_id)
+               join sit_locations using (project_code, site_id, obs_no)
+               left outer join (select * from sit_soil_classifications 
+                 where soil_class_no = 1) sc 
+                   using (project_code, site_id, obs_no)
+               where avail_status = 'E'
+               and site_qc_status = 'P'
+               and datum = 3
+               order by project_code, site_id, obs_no") %>% 
+    dplyr::filter(LONGITUDE > 1) # >:-(
+  saveRDS(l1_simple, l1s_datafile)
+} 
+
 ```
  
 ### Abbreviated parameters 
   
-Some site and observation-level parameters can have multiple records, that can be reported in a simplified format. These are
+Some site and observation-level parameters can have multiple records, but in this context they can be reported in a simplified format. These are
 
   * Site disturbance (report 'worst')
   * Microrelief (report presence/absence)
   * Surface coarse fragments (report total abundance, dominant size, and maximum size)
-  * Outcrop (report total abundance)
+  * Outcrop (report dominant abundance and lithology)
   
 #### Site disturbance
 
-Note that only 132 observations currently have more than one disturbance recorded, and at least one is just a duplicate.
+Note that only 132 observations currently have more than one disturbance recorded, and at least one is just a duplicate, where the same disturbance code was entered twice.
 
 ```{r l1_dist}
 l1_dist <- 
-   dbGetQuery(SALI, 
-             "select project_code, site_id, obs_no, disturb_no, disturb_type
-             from reg_projects
-             join sit_disturbances using (project_code)
-             where avail_status = 'E'
-             and site_qc_status = 'P'
-             order by project_code, site_id, obs_no") %>% 
-  mutate(DISTURBANCE = 
-           factor(DISTURB_TYPE, levels = as.character(seq(9) - 1), 
-                  ordered = TRUE)) %>% 
+  dplyr::select(sit_data[['DIS']], 
+                PROJECT_CODE, SITE_ID, OBS_NO, DISTURB_NO, DISTURB_TYPE) %>% 
   group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>%
-  summarise(DISTURBANCE = as.character(max(DISTURBANCE)))
+  summarise(DISTURBANCE = as.character(max(as.integer(DISTURB_TYPE))))
 
 ```
 
 #### Microrelief 
 
-The following simplifies the SALI records down to 'present'/'confirmed absent'/'not recorded' for 'landscape' microrelief only - that which is controlled by inherent soil and parent material properties. As such, the gilgai types are retained, along with karst country and mound/depression microrelief. Excluded are biotic microrelief (as its often ephemeral), limited-extent features like sinkholes and springs, and microrelief induced by loss of vegetation cover (e.g. terracettes and slumps).
+The following simplifies the SALI records down to 'present'/'confirmed absent'/'not recorded', for 'landscape' microrelief only - that which is controlled by inherent soil and parent material properties. As such, the gilgai types are retained, along with karst country and mound/depression microrelief. Excluded are biotic microrelief (as its often ephemeral), limited-extent features like sinkholes and springs, and microrelief induced by loss of vegetation cover (e.g. terracettes and slumps).
 
 ```{r l1_gilgai}
-L1_gilgai <- 
- dbGetQuery(SALI, 
-             "select project_code, site_id, obs_no, micro_no, micro_type
-             from reg_projects
-             join sit_microreliefs using (project_code)
-             where avail_status = 'E'
-             and site_qc_status = 'P'
-             order by project_code, site_id, obs_no") %>% 
+L1_gilgai <-
+  dplyr::select(sit_data[['MIC']],
+                PROJECT_CODE, SITE_ID, OBS_NO, MICRO_NO, MICRO_TYPE) %>%
   group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>%
   summarise(GILGAI_PRESENCE = {
-    if(any(MICRO_TYPE %in% c('A', 'C', 'G', 'K', 'L', 'M', 'N'))) {
+    if (all(is.na(MICRO_TYPE))) {
+      NA
+    } else if (any(MICRO_TYPE %in% c('A', 'C', 'G', 'K', 'L', 'M', 'N'))) {
       TRUE
-    } else if(any(MICRO_TYPE == 'Z')) { 
-      FALSE 
-    } else { 
-      NA }
-    })
+    } else if (any(MICRO_TYPE == 'Z')) {
+      FALSE
+    } else {
+      NA
+    }
+  })
 ```
 
 #### Surface coarse fragments
 
-Multiple records can be created for surface coarse fragments where e.g. poorly sorted lag gravels exist. These records are infrequent but should be retained. Below, surface coarse fragment data is simplified to report total abundance as a percentage, and then both the maximum and most abundant size fractions observed. Lithology and shape are omitted for now as they may not be highly relevant to modelling e.g. surface water infiltration.
+Multiple records can be created for surface coarse fragments where e.g. poorly sorted lag gravels exist. Below, surface coarse fragment data is simplified to report total abundance as a percentage, and then both the maximum and most abundant size fractions observed. Lithology and shape are omitted for now as they may not be highly relevant to modelling e.g. surface water infiltration.
 
 ```{r l1_scfs}
 # decode coarse frag abundance categories - see Yellow Book
@@ -296,31 +304,37 @@ cf_abunds <- tribble(~ABUND, ~LO, ~MID, ~HI,
 # function to get largest sum of abundances that doesn't exceed 100
 sum_abund <- function(x = NULL) {
   # x is a vector of cats
-  lo  <- sum(cf_abunds$LO[cf_abunds$ABUND %in% x])
-  mid <- sum(cf_abunds$MID[cf_abunds$ABUND %in% x]) 
-  hi  <- sum(cf_abunds$HI[cf_abunds$ABUND %in% x])
-  pick <- which(c(lo, mid, hi) <= 100)
+  lo   <- sum(cf_abunds$LO[cf_abunds$ABUND %in% x])
+  mid  <- sum(cf_abunds$MID[cf_abunds$ABUND %in% x]) 
+  hi   <- sum(cf_abunds$HI[cf_abunds$ABUND %in% x])
+  pick <- which(c(lo, mid, hi) < 100)
   if(all(is.na(pick))) { return(100) } # all add up to > 100 e.g. 4, 6
   c(lo, mid, hi)[max(pick)] # pick biggest below 100%
 }
 
 l1_scf <- 
- dbGetQuery(SALI, 
-             "select project_code, site_id, obs_no,
-             surf_frag_no, abundance as surf_frag_abund, surf_frag_size
-             from reg_projects
-             join sit_surf_coarse_frags using (project_code)
-             where avail_status = 'E'
-             and site_qc_status = 'P'
-              order by project_code, site_id, obs_no, surf_frag_no") %>% 
+  dplyr::select(sit_data[['SCF']],
+                PROJECT_CODE, SITE_ID, OBS_NO, SURF_FRAG_NO, ABUNDANCE, 
+                SURF_FRAG_SIZE) %>% 
+  dplyr::filter(!is.na)
+  rename(SURF_FRAG_ABUND = ABUNDANCE) %>%
+  # handle historical code '-'
+  mutate_if(is.character, list(~na_if(., '-'))) %>% 
   group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>%
   summarise(SURF_FRAG_TOTAL_ABUND_PC = sum_abund(SURF_FRAG_ABUND),
             SURF_FRAG_MAX_SIZE = max(SURF_FRAG_SIZE),
             SURF_FRAG_DOM_SIZE = {
-              x <- SURF_FRAG_SIZE[which(SURF_FRAG_ABUND == max(SURF_FRAG_ABUND))]
-              # for abundance ties, pick largest size
-              if(length(x) > 1) { max(x) } else { x }
+              if(all(is.na(SURF_FRAG_NO))) { 
+                NA 
+                } else {
+                  x <- SURF_FRAG_SIZE[which(SURF_FRAG_ABUND == max(SURF_FRAG_ABUND))]
+                 # for abundance ties, pick largest size
+                 if(length(x) > 1) { max(x) } else { x }
+                }
             })
+# actually super not fond of back-converting this data
+# should be modelled as it was recorded - ordinal cats
+# TODO look into better ways to total the categorical abundance data
 ```
 
 #### Rock Outcrop
@@ -342,147 +356,416 @@ sum_oc_abund <- function(x = NULL) {
   lo  <- sum(oc_abunds$LO[oc_abunds$ABUND %in% x])
   mid <- sum(oc_abunds$MID[oc_abunds$ABUND %in% x]) 
   hi  <- sum(oc_abunds$HI[oc_abunds$ABUND %in% x])
-  pick <- which(c(lo, mid, hi) <= 100)
+  pick <- which(c(lo, mid, hi) < 100)
   if(all(is.na(pick))) { return(100) } 
   c(lo, mid, hi)[max(pick)] 
 }
 
 l1_outcrop <- 
-   dbGetQuery(SALI, 
-             "select project_code, site_id, obs_no, outcrop_no, 
-                abundance as outcrop_abund
-              from reg_projects
-              join sit_rock_outcrops using (project_code)
-              where avail_status = 'E'
-                and site_qc_status = 'P'
-              order by project_code, site_id, obs_no, outcrop_no") %>% 
+  dplyr::select(sit_data[['OTC']],
+                PROJECT_CODE, SITE_ID, OBS_NO, OUTCROP_NO, ABUNDANCE) %>% 
+  rename(OUTCROP_ABUND = ABUNDANCE) %>% 
   group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>%
   summarise(OUTCROP_ABUND = sum_oc_abund(OUTCROP_ABUND))
 
 ```
 
+NB: will later have to rescale surface coarse frag and outcrop abundance to add to total of 100%, where exceedences exist (they shouldn't).
+
 ### Profile summary parameters
 
-Some summaries of soil profile characteristics can be reported at the observation level. These include a number that have been specifically requested for SLGA II. The ASRIS tech spec (v1.6) also defines some of these 
+Many summaries of soil profile characteristics can be reported at the observation level. These include a number that have been specifically requested for SLGA II, others from the ASRIS tech spec (v1.6), and others can be derived from diagnostic criteria used in the ASC.
 
   * Depth of A1 horizon
   * Total depth of A horizons
   * Depth to B2 horizon
-  * Depth to impeded layer (rock, pan etc)
+  * Depth to impeding layer (rock, pan etc)
   * Depth of solum
   * Depth of observation
+  * Number of named horizons
   * Name of deepest horizon (can help with interpretation of DOA)
-  * Min, Median, and Max A and B textures
-  * Substrate nature (unconsolidated, consolidated etc)
-  * 'duplexiness' 
+  * Min and Max A and B textures
   * Presence/absence of bleached A2 horizon
+  * Substrate nature (unconsolidated, consolidated etc)
+  * 'duplexiness' (clay content contrast between A and B plus sharpness of change)
+  * 
+
+
+#### Depth of A1
+
+```{r doa}
+d_A1 <- 
+  dplyr::select(sit_data[['HOR']],
+                PROJECT_CODE, SITE_ID, OBS_NO, 
+                DESIGN_MASTER, DESIGN_NUM_PREFIX, DESIGN_SUBDIV, LOWER_DEPTH) %>% 
+  dplyr::filter(DESIGN_MASTER %in% c('A', 'A?')) %>% 
+  dplyr::filter(is.na(DESIGN_NUM_PREFIX)) %>% 
+  dplyr::filter(DESIGN_SUBDIV %in% c(1, 10, 11, 12, 13, 14, 15)) %>% 
+  group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>% 
+  summarise(depth_of_A1 = max(LOWER_DEPTH, na.rm = TRUE))
+
+# TODO check whether A with no subdiv should count as A1 in this context
+```
 
 #### Total depth of A
 
 ```{r doa}
-doa <- 
-  dbGetQuery(SALI, 
-  "select project_code, site_id, obs_no, max(lower_depth) as depth_of_A
-   from reg_projects
-   join sit_horizons using (project_code)
-   where avail_status = 'E'
-     and site_qc_status = 'P'
-     and design_master = 'A'
-     and design_num_prefix is null /* no buried A allowed! */
-   group by project_code, site_id, obs_no
-   order by project_code, site_id, obs_no")
+d_A <- 
+  dplyr::select(sit_data[['HOR']],
+                PROJECT_CODE, SITE_ID, OBS_NO, 
+                DESIGN_MASTER, DESIGN_NUM_PREFIX, LOWER_DEPTH) %>% 
+  dplyr::filter(DESIGN_MASTER %in% c('A', 'A?')) %>% 
+  dplyr::filter(is.na(DESIGN_NUM_PREFIX)) %>% 
+  group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>% 
+  summarise(depth_of_A = max(LOWER_DEPTH, na.rm = TRUE))
+```
+
+#### Depth to B2
+
+```{r doa}
+d_B2 <- 
+  dplyr::select(sit_data[['HOR']],
+                PROJECT_CODE, SITE_ID, OBS_NO, 
+                DESIGN_MASTER, DESIGN_NUM_PREFIX, DESIGN_SUBDIV, UPPER_DEPTH) %>% 
+  dplyr::filter(DESIGN_MASTER %in% c('B', 'B?')) %>% 
+  dplyr::filter(is.na(DESIGN_NUM_PREFIX)) %>% 
+  dplyr::filter(DESIGN_SUBDIV %in% c(2, seq(20, 29))) %>% 
+  group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>% 
+  summarise(depth_to_B2 = min(UPPER_DEPTH, na.rm = TRUE))
+
+```
+
+#### Depth to impeding layer
+
+The ASRIS specs define impeding layers as a result of chemical toxicity, chemical deficiency, direct physical impedance, or permanent water table, in the context of effects on agricultural plants (Table 29). The following focuses only on physical and hydrological impedance. Note that many non-agricultural plants are not affected by these impedances, particularly the water table depth (e.g. mangroves).
+
+Parameters examined are calculated depth to R horizon, depth to continuous cemented pan, and depth to permanent water table.
+
+Note: Depth to R horizon is sometimes also recorded at the observation level, but sigificant data quality problems mean that this field is currently unusable. Known issues:
+  * large number of values recorded in cm rather than m, inconsistently within and between projects
+  * obvious discrepancies between profile descriptions and stated depth to R. 
+  * obvious nonsense values e.g. 999
+
+```{r physimp}
+d_2r_hor <- dplyr::filter(sit_data[['HOR']], DESIGN_MASTER == 'R') %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, UPPER_DEPTH) %>% 
+  group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>% 
+  summarise(DEPTH_R_HOR = min(UPPER_DEPTH, na.rm = TRUE))
+
+d_pan <- 
+  dplyr::filter(sit_data[['PAN']], !is.na(CEMENTATION)) %>% 
+  dplyr::filter(!(CEMENTATION %in% c('0', '1'))) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, PAN_NO, 
+                CEMENTATION) %>% 
+  inner_join(.,
+             dplyr::select(sit_data[['HOR']], 
+               PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, UPPER_DEPTH),
+             by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO', 'HORIZON_NO')) %>% 
+  group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>% 
+  summarise(DEPTH_HARDPAN = min(UPPER_DEPTH, na.rm = TRUE))
+
+# TODO check if pans should also be Continuous or of a particular type
+  
+d_pwt <- dplyr::filter(sit_data[['OBS']], 
+                       FREE_WATER_FLAG == 'Y' | !is.na(DEPTH_WATER)) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, FREE_WATER_FLAG, DEPTH_WATER) %>% 
+  # many CTAP sites have DEPTH_WATER == 0 but the soils are described as dry
+  mutate(DEPTH_WATER = 
+           ifelse(PROJECT_CODE == 'CTAP' & DEPTH_WATER == 0, NA, DEPTH_WATER)) %>% 
+  filter(!is.na(DEPTH_WATER)) %>% 
+  # inconsistent recording in -ve or +ve units so:
+  mutate(DEPTH_WATER = abs(DEPTH_WATER))
+  # consider the unit to be m BGL
+  # Note: there will be a few in ETA that are now wrong, mostly in the 0-0.3m
+  # range where sampling was done in the East Trinity Remediation Area. These
+  # are geographically restricted and rare so are left for now
+
+d_phys_imp <- reduce(list(d_2r_hor, d_pan, d_pwt), full_join,
+                     by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO')) %>% 
+  rowwise() %>% 
+  mutate(DEPTH_IMPED = min(DEPTH_R_HOR, DEPTH_HARDPAN, DEPTH_WATER, 
+                           na.rm = TRUE))
+
 ```
 
 #### Depth of Solum
 
-This can include buried horizons. There's no easy way to truncate those where a C or D interrupts the sequence, but these are going to be very rare so, meh.
+The ASRIS spec is silent on a good definition of solum, and other definitions are a bit all over the place. For now, this query will include A and B horizons, including buried ones. 
+
+There's no easy way to truncate those where a non-A or B horizon interrupts the profile sequence (e.g. distinguishing A-B-Db1-Db2-2A-2B from A-B-2B), but these are going to be rare and the non A/B horizons may not impede plant growth, so IMO still count as solum materials.
 
 ```{r doa}
-dos <- 
-  dbGetQuery(SALI, 
-  "select project_code, site_id, obs_no, max(lower_depth) as solum_depth
-   from reg_projects
-   join sit_horizons using (project_code)
-   where avail_status = 'E'
-     and site_qc_status = 'P'
-     and design_master in ('A', 'B')
-   group by project_code, site_id, obs_no 
-   order by project_code, site_id, obs_no")
-
-dos_2 <- 
-dbGetQuery(SALI, 
-  "select project_code, site_id, obs_no, max(lower_depth) as solum_depth
-   from reg_projects
-   join sit_horizons using (project_code)
-   where avail_status = 'E'
-     and site_qc_status = 'P'
-     and design_master in ('A', 'B')
-     and texture_code is not null
-   group by project_code, site_id, obs_no 
-   order by project_code, site_id, obs_no")
-  
-dos_3 <- 
-  dbGetQuery(SALI, 
-  "select project_code, site_id, obs_no, max(lower_depth) as solum_depth
-   from reg_projects
-   join sit_horizons using (project_code)
-   where avail_status = 'E'
-     and site_qc_status = 'P'
-     and regexp_like(design_master, 'A|B')
-     and design_num_prefix is null
-   group by project_code, site_id, obs_no 
-   order by project_code, site_id, obs_no")
-
-```
-
-#### Depth to hard layer
-
-Using the shallowest of `SIT_OBSERVATIONS.DEPTH_RHORIZON`, upper depth of an R horizon (possibly where it is thinner than 0.3m as this indicates the horizon was hard enough that equipment couldn't penetrate), presence of a pan with cementation of 2,3,4
-
-```{r hardlyr}
-
-rhor_obs <- 
-  dbGetQuery(SALI,
-  "select project_code, site_id, obs_no, depth_rhorizOn
-   from reg_projects
-   join sit_observations using (project_code)
-   where avail_status = 'E'
-     and site_qc_status = 'P'
-   group by project_code, site_id, obs_no 
-   order by project_code, site_id, obs_no")
-  
-rhor_hor <- 
-  dbGetQuery(SALI,
-  "select project_code, site_id, obs_no, (lower_depth - upper_dpeth) as hor_thick
-   from reg_projects
-   join sit_horizons using (project_code)
-   where avail_status = 'E'
-     and site_qc_status = 'P'
-     and design_master in ('R')
-   group by project_code, site_id, obs_no 
-   order by project_code, site_id, obs_no")
-  )
-
-cem_pan <- 
-  dbGetQuery(SALI,
-  "select project_code, site_id, obs_no, horizon_no, upper_depth, lower_depth, pan_no,
-  pan_type, cementation, continuity
-   from reg_projects
-   join sit_horizons using (project_code)
-   left outer join (select * from sit_pans where cementation in ('2', '3', '4'))
-     using (project_code)
-   where avail_status = 'E'
-     and site_qc_status = 'P'
-   order by project_code, site_id, obs_no") %>% 
-group_by(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO) %>% 
-  summarise(HARD_PAN = ifelse(any(!is,na(PAN_NO)), TRUE, FALSE)) %>%
+d_sol <-
+  dplyr::select(sit_data[['HOR']],
+                PROJECT_CODE, SITE_ID, OBS_NO, DESIGN_NUM_PREFIX, 
+                DESIGN_MASTER, LOWER_DEPTH) %>% 
+  dplyr::filter(is.na(DESIGN_NUM_PREFIX)) %>% 
+  dplyr::filter(grepl('A|B', DESIGN_MASTER)) %>% 
   group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>% 
-  summarise(PAN_DEPTH = ifelse(any(HARD_PAN == TRUE), 
-                               # upper depth of pan horizon,
-                               NA))
-              
+  summarise(DEPTH_SOLUM = max(LOWER_DEPTH, na.rm = TRUE))
 
 ```
+
+#### Depth of observation
+
+This is just the max recorded horizon depth.
+
+```{r doa}
+d_obs <- 
+   dplyr::select(sit_data[['HOR']],
+                PROJECT_CODE, SITE_ID, OBS_NO, LOWER_DEPTH) %>% 
+  group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>% 
+  summarise(DEPTH_OBSERVED = max(LOWER_DEPTH, na.rm = TRUE))
+
+```
+
+#### Number of horizons
+
+Only horizons with names are counted here - profiles with no named horizons will get a count of 0. These may be related to surface samples or samples taken at set depths for C analysis, as SALI only recently decoupled sample entry from horizon entry. Some are also related to sites with low data quality - where most data is just missing for unknown reasons.
+
+```{r hcnt}
+h_count <- 
+  dplyr::select(sit_data[['HOR']], 
+                PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NAME) %>% 
+  group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>% 
+  summarise(H_COUNT = sum(!is.na(HORIZON_NAME))) 
+
+```
+
+#### Deepest horizon name
+
+Where this is e.g. A or B, the site should be excluded from attempts to model depth of soil.
+
+```{r deepname}
+hname_max <- 
+  dplyr::select(sit_data[['HOR']], 
+                PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, HORIZON_NAME) %>% 
+  filter(!is.na(HORIZON_NAME)) %>%
+  left_join(., h_count, by = c('PROJECT_CODE', 'SITE_ID' ,'OBS_NO')) %>% 
+  dplyr::filter(HORIZON_NO == H_COUNT) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NAME) %>% 
+  rename(MAX_H_NAME = HORIZON_NAME)
+  
+```
+
+#### A and B horizon textures
+
+Texture codes are map back to a multidimensional space (at its simplest, a ternary sand/silt/clay plot) so they're kind of hard to rank. An attempt has been made in the file 'HELPER_ranking-texture-codes.Rmd' and the results are used below. Buried horizons are ignored.
+
+```{r sumtext}
+# the quantiles below are roughly equivalent to +/- 1SD if the data were normal
+# not all codes have associated data but this should help with ranking
+tex_ranks <- read_csv(file.path(getwd(), 'helpers',
+                                'SALI_TEXTURE_CODE_RANKING_DRAFT.csv'))
+
+min_A_tex <- 
+  dplyr::select(sit_data[['HOR']], PROJECT_CODE, SITE_ID, OBS_NO,
+                DESIGN_NUM_PREFIX, DESIGN_MASTER,
+                HORIZON_NAME, TEXTURE) %>% 
+  dplyr::filter(DESIGN_MASTER %in% c('A', 'A?')) %>% 
+  dplyr::filter(is.na(DESIGN_NUM_PREFIX)) %>% 
+  left_join(., dplyr::select(tex_ranks, TEXTURE, FINAL_RANK), 
+            by = c('TEXTURE')) %>% 
+  group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>% 
+  dplyr::filter(FINAL_RANK == min(FINAL_RANK)) %>% 
+  slice(1L) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, TEXTURE) %>% 
+  rename(MIN_A_TEXTURE = TEXTURE)
+  
+max_A_tex <- 
+  dplyr::select(sit_data[['HOR']], PROJECT_CODE, SITE_ID, OBS_NO, 
+                DESIGN_NUM_PREFIX, DESIGN_MASTER,
+                HORIZON_NAME, TEXTURE) %>% 
+  dplyr::filter(DESIGN_MASTER %in% c('A', 'A?')) %>% 
+  dplyr::filter(is.na(DESIGN_NUM_PREFIX)) %>% 
+  left_join(., dplyr::select(tex_ranks, TEXTURE, FINAL_RANK),
+            by = c('TEXTURE')) %>% 
+  group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>% 
+  dplyr::filter(FINAL_RANK == max(FINAL_RANK)) %>% 
+  group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>% 
+  slice(1L) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, TEXTURE) %>% 
+  rename(MAX_A_TEXTURE = TEXTURE)
+
+min_B_tex <- 
+  dplyr::select(sit_data[['HOR']], PROJECT_CODE, SITE_ID, OBS_NO,
+                DESIGN_NUM_PREFIX, DESIGN_MASTER, HORIZON_NAME, TEXTURE) %>% 
+  dplyr::filter(DESIGN_MASTER %in% c('B', 'B?', 'BK', 'BT')) %>% 
+  dplyr::filter(is.na(DESIGN_NUM_PREFIX)) %>% 
+  left_join(., dplyr::select(tex_ranks, TEXTURE, FINAL_RANK),
+            by = c('TEXTURE')) %>% 
+  group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>% 
+  dplyr::filter(FINAL_RANK == min(FINAL_RANK)) %>% 
+  group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>% 
+  slice(1L) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, TEXTURE) %>% 
+  rename(MIN_B_TEXTURE = TEXTURE)
+  
+max_B_tex <- 
+  dplyr::select(sit_data[['HOR']], PROJECT_CODE, SITE_ID, OBS_NO, 
+                DESIGN_NUM_PREFIX, DESIGN_MASTER, HORIZON_NAME, TEXTURE) %>% 
+  dplyr::filter(DESIGN_MASTER %in% c('B', 'B?', 'BK', 'BT')) %>% 
+  dplyr::filter(is.na(DESIGN_NUM_PREFIX)) %>% 
+  left_join(., dplyr::select(tex_ranks, TEXTURE, FINAL_RANK),
+            by = c('TEXTURE')) %>% 
+  group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>% 
+  dplyr::filter(FINAL_RANK == max(FINAL_RANK)) %>% 
+  group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>% 
+  slice(1L) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, TEXTURE) %>% 
+  rename(MAX_B_TEXTURE = TEXTURE)
+
+AB_textures <- reduce(list(min_A_tex, max_A_tex, min_B_tex, max_B_tex),
+                      full_join, by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO'))
+
+```
+
+#### Bleached A2 presence
+
+Bleached A2 horizons are diagnostic in the ASC and also signify particular landscape and soil-forming processes.
+
+```{r bleach}
+has_bleach <- sit_data[['HOR']] %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, 
+                DESIGN_NUM_PREFIX, DESIGN_MASTER, DESIGN_SUBDIV,
+                HORIZON_NAME) %>% 
+  dplyr::filter(is.na(DESIGN_NUM_PREFIX)) %>% 
+  dplyr::filter(DESIGN_MASTER == 'A') %>% 
+  dplyr::filter(DESIGN_SUBDIV == 2) %>%
+  mutate(IS_BLEACHED = ifelse(grepl('e', HORIZON_NAME), TRUE, FALSE)) %>% 
+  group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>% 
+  summarise(HAS_BLEACH = 
+              if(any(grepl('e', HORIZON_NAME))) { TRUE } else { FALSE })
+
+```
+
+#### Duplexiness/Texture Contrast presence
+
+Texture contrast status of a soil under the ASC requires presence of a 'clear or abrupt textural B':
+
+  * Transition between last A (or B1) and first B2 be 'clear, abrupt, or sharp' (5cm or less)
+  * B horizons must be SCL or heavier
+  * if the B horizon is not a clay, the A horizon must be at least half as clayey, otherwise the A must be at least 20% less clayey
+  
+'Duplex' soils in the Principal Profile Form system (Northcote) are less strictly defined:
+
+  * A to B over 10cm or less (sharp, abrupt, clear or gradual)
+  * change of "1.5 or more texture groups", with the groups defined in relation to a set of texture codes that don't quite match what's in the Yellow Book
+  
+Leaving aside the odd treatment of categories, this amounts to e.g. S -> L, SL -> CL, CL -> LMC. So the PPF system is slightly more relaxed than the ASC in terms of both texture jump and transition distance.
+
+Both of these definition sets are based on field experience. While there are many management implications to a texture contrast profile, the exact cutoffs used to define them have not been strongly operationalised - they are somewhat arbitrary. Texture contrast soils are like art, you know it when you see it.
+
+It may be useful, then, to define a combined scale of texture contrast behaviour where this macro feature becomes progressively more obvious. With texture codes placed into the GROUP_2 rankings in `tex_ranks`, the following will be applied to profiles where a Clear, Abrupt or Sharp horizon transition has been recorded between the the last A (or B1) horizon and the next horizon, which must be a B2. Buried soils are not considered.
+
+  * NA - insufficient data to diagnose
+  * 0 - no texture contrast present by any accepted definition
+  * 1 - minimal texture jump allowable - 4 ranks in GROUP_2 e.g. LS over SCL or SCL over LMC. Can't both be clays.
+  * 2 - moderate texture jump - 5-8 ranks eg. S over CLS, SL over CL, L over LC
+  * 3 - maximal texture jump - more than 8 ranks e.g. S over CL, SL over LMC
+
+Not sure whether to bring in further horizon nomenclature, B2 structure or bleach presence. They can co-occur - more pronounced TC soils often have bleached A2s, for example - but might just be confusing the issue. 
+
+```{r duplexiness}
+# get bound_distinct of last A horizon in profile
+A_bnd <- sit_data[['HOR']] %>% 
+  dplyr::filter(is.na(DESIGN_NUM_PREFIX)) %>% 
+  dplyr::filter(DESIGN_MASTER %in% c('A', 'A?')) %>% 
+  group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>% 
+  dplyr::filter(HORIZON_NO == max(HORIZON_NO)) %>% 
+  ungroup() %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, HORIZON_NAME,
+                TEXTURE, BOUND_DISTINCT) %>% 
+  mutate(TCB_A = case_when(BOUND_DISTINCT %in% c('S', 'A', 'C') ~ TRUE,
+                           is.na(BOUND_DISTINCT) ~ NA,
+                           TRUE ~ FALSE)) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, TEXTURE, TCB_A) %>% 
+  rename(LAST_A_NO = HORIZON_NO)
+
+# for profiles in the above, check if the next horizon down is a B2 
+athenB <- A_bnd %>%   
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, LAST_A_NO) %>% 
+  mutate(HORIZON_NO = LAST_A_NO + 1) %>% 
+  left_join(., sit_data[['HOR']], 
+            by = c("PROJECT_CODE", "SITE_ID", "OBS_NO", "HORIZON_NO")) %>% 
+  mutate(A_OVER_B2 = ifelse(DESIGN_MASTER %in% c('B', 'B?') &
+                                is.na(DESIGN_NUM_PREFIX) & 
+                              grepl('^2)', DESIGN_SUBDIV), TRUE, FALSE)) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, A_OVER_B2) %>% 
+  ungroup()
+
+# repeat for B1 over B2
+
+# get bound_distinct of last B1 in profile (where present)
+B1_bnd <- sit_data[['HOR']] %>% 
+  dplyr::filter(is.na(DESIGN_NUM_PREFIX)) %>% 
+  dplyr::filter(DESIGN_MASTER %in% c('B', 'B?')) %>% 
+  dplyr::filter(grepl('^1', DESIGN_SUBDIV)) %>% 
+  group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>% 
+  dplyr::filter(HORIZON_NO == max(HORIZON_NO)) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, HORIZON_NAME,
+                TEXTURE_CODE, TEXTURE_QUALIFIER, BOUND_DISTINCT) %>% 
+  mutate(TCB_B1 = case_when(BOUND_DISTINCT %in% c('S', 'A', 'C') ~ TRUE,
+                           is.na(BOUND_DISTINCT) ~ NA,
+                           TRUE ~ FALSE)) %>% 
+  ungroup() %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, TCB_B1)  %>% 
+  rename(LAST_B1_NO = HORIZON_NO)
+
+
+# for profiles in the above, check if the next horizon down is a B2 
+B1thenB2 <- B1_bnd %>%   
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, LAST_B1_NO) %>% 
+  mutate(HORIZON_NO = LAST_B1_NO + 1) %>% 
+  left_join(., sit_data[['HOR']], 
+            by = c("PROJECT_CODE", "SITE_ID", "OBS_NO", "HORIZON_NO")) %>% 
+  mutate(B1_OVER_B2 = ifelse(DESIGN_MASTER %in% c('B', 'B?') &
+                                is.na(DESIGN_NUM_PREFIX) & 
+                              grepl('^2', DESIGN_SUBDIV), TRUE, FALSE)) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, B1_OVER_B2) %>% 
+  ungroup()
+
+# fair to say that B1s are almost always followed by B2s
+
+# join everything up and ID profiles that meet the horizon change part of the 
+# TC definition
+dat <- reduce(list(A_bnd, athenB, B1_bnd, B1thenB2), full_join) %>% 
+  mutate(SAC_AB = case_when(A_OVER_B2 == TRUE & TCB_A == TRUE ~ TRUE,
+                            A_OVER_B2 == TRUE & TCB_A == FALSE ~ FALSE,
+                            B1_OVER_B2 == TRUE & TCB_B1 == TRUE ~ TRUE,
+                            B1_OVER_B2 == TRUE & TCB_B1 == FALSE ~ FALSE,
+                            TRUE ~ NA))
+               
+# next: get the texture codes either side of the divide, where SAC_AB = TRUE
+tc_last <- dat %>% 
+  left_join(., 
+            dplyr::select(sit_data[['HOR']], PROJECT_CODE, SITE_ID, OBS_NO, 
+                          HORIZON_NO, TEXTURE),
+            by = c("PROJECT_CODE", "SITE_ID", "OBS_NO", "LAST_A_NO" = "HORIZON_NO")) %>% 
+  rename(LAST_A_TEX = TEXTURE) %>% 
+  left_join(., 
+            dplyr::select(sit_data[['HOR']], PROJECT_CODE, SITE_ID, OBS_NO, 
+                          HORIZON_NO, TEXTURE),
+            by = c("PROJECT_CODE", "SITE_ID", "OBS_NO", "LAST_B1_NO" = "HORIZON_NO")) %>% 
+  rename(LAST_B1_TEX = TEXTURE) %>% 
+  mutate(NEXT_B_NO = case_when(A_OVER_B2  == TRUE ~ LAST_A_NO + 1,
+                               B1_OVER_B2 == TRUE ~ LAST_B1_NO + 1,
+                            TRUE ~ NA_real_)) %>% 
+  left_join(., 
+            dplyr::select(sit_data[['HOR']], PROJECT_CODE, SITE_ID, OBS_NO, 
+                          HORIZON_NO, TEXTURE_CODE, TEXTURE_QUALIFIER),
+            by = c("PROJECT_CODE", "SITE_ID", "OBS_NO", "NEXT_B_NO" = "HORIZON_NO")) %>% 
+  rename(B2_TEX = TEXTURE) 
+
+# condense texture cols
+  
+  
+
+
+
+```
+
+
 
 The layer components are now joined to create a one-row-per-observation dataset.
 
