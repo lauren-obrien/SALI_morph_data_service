@@ -388,8 +388,7 @@ Many summaries of soil profile characteristics can be reported at the observatio
   * Presence/absence of bleached A2 horizon
   * Substrate nature (unconsolidated, consolidated etc)
   * 'duplexiness' (clay content contrast between A and B plus sharpness of change)
-  * 
-
+  * Surface horizon colour, B2 colour (and ASC colour class)
 
 #### Depth of A1
 
@@ -686,13 +685,21 @@ A_bnd <- sit_data[['HOR']] %>%
 athenB <- A_bnd %>%   
   dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, LAST_A_NO) %>% 
   mutate(HORIZON_NO = LAST_A_NO + 1) %>% 
-  left_join(., sit_data[['HOR']], 
+  left_join(., dplyr::select(sit_data[['HOR']], 
+                             PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO,
+                             DESIGN_MASTER, DESIGN_NUM_PREFIX,
+                             DESIGN_SUBDIV, HORIZON_NAME),
             by = c("PROJECT_CODE", "SITE_ID", "OBS_NO", "HORIZON_NO")) %>% 
-  mutate(A_OVER_B2 = ifelse(DESIGN_MASTER %in% c('B', 'B?') &
-                                is.na(DESIGN_NUM_PREFIX) & 
-                              grepl('^2)', DESIGN_SUBDIV), TRUE, FALSE)) %>% 
-  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, A_OVER_B2) %>% 
-  ungroup()
+  mutate(A_OVER_B2 = case_when(DESIGN_MASTER %in% c('B', 'B?') &
+                                is.na(DESIGN_NUM_PREFIX) &
+                              grepl('^2', DESIGN_SUBDIV) ~ TRUE,
+                              # unspecified B also allowed 
+                              DESIGN_MASTER %in% c('B', 'B?') &
+                                is.na(DESIGN_NUM_PREFIX) &
+                                is.na(DESIGN_SUBDIV) ~ TRUE, 
+                              is.na(HORIZON_NAME) ~ NA,
+                               TRUE ~ FALSE)) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, A_OVER_B2) 
 
 # repeat for B1 over B2
 
@@ -717,11 +724,20 @@ B1_bnd <- sit_data[['HOR']] %>%
 B1thenB2 <- B1_bnd %>%   
   dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, LAST_B1_NO) %>% 
   mutate(HORIZON_NO = LAST_B1_NO + 1) %>% 
-  left_join(., sit_data[['HOR']], 
+  left_join(., dplyr::select(sit_data[['HOR']], 
+                             PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO,
+                             DESIGN_MASTER, DESIGN_NUM_PREFIX,
+                             DESIGN_SUBDIV, HORIZON_NAME), 
             by = c("PROJECT_CODE", "SITE_ID", "OBS_NO", "HORIZON_NO")) %>% 
-  mutate(B1_OVER_B2 = ifelse(DESIGN_MASTER %in% c('B', 'B?') &
-                                is.na(DESIGN_NUM_PREFIX) & 
-                              grepl('^2', DESIGN_SUBDIV), TRUE, FALSE)) %>% 
+  mutate(B1_OVER_B2 = case_when(DESIGN_MASTER %in% c('B', 'B?') &
+                                is.na(DESIGN_NUM_PREFIX) &
+                              grepl('^2', DESIGN_SUBDIV) ~ TRUE,
+                              # unspecified B also allowed 
+                              DESIGN_MASTER %in% c('B', 'B?') &
+                                is.na(DESIGN_NUM_PREFIX) &
+                                is.na(DESIGN_SUBDIV) ~ TRUE, 
+                              is.na(HORIZON_NAME) ~ NA,
+                               TRUE ~ FALSE))
   dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, B1_OVER_B2) %>% 
   ungroup()
 
