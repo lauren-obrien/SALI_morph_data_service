@@ -1,0 +1,279 @@
+---
+title: "Checking PSA data vs Texture Codes"
+author: "Lauren O'Brien"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, results = 'hold', fig.height = 6,
+                      fig.align = 'center', warning = FALSE, message = FALSE)
+```
+
+Field texture measures the behaviour of a small volume of soil at field capacity. The Yellow Book notes correctly that texture doesn't map neatly to PSA (which notably excludes +2mm size fractions and ignores the influence of organic matter, sesquioxides, etc on soil physical behaviour). However, texture codes are qualitatively defined using references to particle size fractions and are roughly mapped to the texture triangle, so PSA data can potentially be used to sanity-check these rankings. That said, not all PSA data makes sense next to texture codes, for instance there are some sand group PSAs with 60% clay. 
+
+While the Yellow Book says not to adjust texture codes in the face of PSA data, that's a sentence that doesn't account for actual errors in a database. Its trying to make the point that PSA measurements and physical soil behaviour aren't necessarily tightly linked (e.g. in subplastic soils) and that the surveyor should trust their perceptions. 
+
+```{r pkgs, results = 'hide'}
+options(stringsAsFactors = FALSE, scipen = 999)
+library(sf)            # vector data IO and processing
+library(DBI)           # database interface
+library(ROracle)       # Oracle database drivers
+library(getPass)       # password management
+library(units)         # for working with unit-attributed data
+library(tidyverse)     # general data manipulation and display
+library(ggtern)        # ternary ggplots
+
+Sys.setenv(
+  'TNS_ADMIN'   = file.path('C:', 'Users', Sys.getenv('USERNAME'), 'Oracle'),
+  'ORACLE_HOME' = 'C:/Program Files/Oracle Instant Client'
+  )
+SALI <- dbConnect(dbDriver('Oracle'),
+                  username = 'obrienle',
+                  password = getPass(),
+                  dbname   = 'sispda',
+                  host     = 'ex02client01',
+                  port     = 1521)
+
+if(!dir.exists(file.path(getwd(), 'SALI_DATA'))) {
+  dir.create(file.path(getwd(), 'SALI_DATA'))
+}
+
+if(!dir.exists(file.path(getwd(), 'DERIVED_DATA'))) {
+  dir.create(file.path(getwd(), 'DERIVED_DATA'))
+}
+```
+
+So, now to extract PSA data from SALI and generate stats for Clay, Silt, Fine Sand, and Coarse Sand fractions. There's data in SALI from multiple PSA lab methods, but by far the bulk of it is in the four codes below so I'll focus on that for now.
+
+```{r tex_v_psa}
+tex_psa <- 
+  dbGetQuery(SALI, 
+  "select project_code, site_id, obs_no, horizon_no, sample_no, texture_code || texture_qualifier as texture,
+     lab_meth_code, numeric_value, raw_value, result_status
+   from sit_horizons
+   left outer join sit_samples using (project_code, site_id, obs_no, horizon_no)
+   left outer join 
+     (select * from sit_lab_results 
+       where lab_meth_code in('2Z2_Clay', '2Z2_Silt', '2Z2_FS', '2Z2_CS')) psa 
+         using(project_code, site_id, obs_no, horizon_no, sample_no)
+   where result_status in ('A', 'BQ')
+   order by project_code, site_id, obs_no, horizon_no, sample_no")
+```
+
+`r nrow(tex_psa)` analytical results to mess about with.
+
+There's a few things to tidy up.
+
+```{r rn}
+# r doesn't like variables starting with numbers too much
+tex_psa$LAB_METH_CODE <- gsub('2Z2_', 'PSA_', tex_psa$LAB_METH_CODE)
+```
+
+All the samples with numeric value NA and raw value 0 can be set to 0.
+
+```{r textidy1}
+tex_psa$NUMERIC_VALUE[which(tex_psa$RAW_VALUE == 0 & 
+                              is.na(tex_psa$NUMERIC_VALUE))] <- 0
+```
+
+Same goes for BQ samples where raw value is 0 and numeric value disagrees, e.g. samples in CBW 288.
+
+```{r textidy2}
+tex_psa$NUMERIC_VALUE[which(tex_psa$RAW_VALUE == 0 & tex_psa$NUMERIC_VALUE > 10 &
+                             tex_psa$RESULT_STATUS == 'BQ')] <- 0
+```
+
+BVL 9017 sample 2 has a fine sand amount of 173%, which is pretty clearly a decimal place error. At 17.3%, the PSA fractions for that sample add up to a sensible 97.3%.
+
+```{r textidy3}
+tex_psa$NUMERIC_VALUE[which(tex_psa$NUMERIC_VALUE == 173)] <- 0
+```
+
+Other errors won't be apparent until the data is wide-formatted and total PSA values checked. Any that don't add up to between 95 and 105% are suspect.
+
+```{R psaw}
+tex_psa_totals <- tex_psa %>% 
+  dplyr::select(-RAW_VALUE, -RESULT_STATUS) %>% 
+  group_by(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, SAMPLE_NO, TEXTURE) %>% 
+  summarise(TOTAL_PSA = sum(NUMERIC_VALUE, na.rm = TRUE),
+            N_COMP    = sum(!is.na(NUMERIC_VALUE)))
+
+tex_psa_wide <- tex_psa %>% 
+  dplyr::select(-RAW_VALUE, -RESULT_STATUS) %>% 
+  pivot_wider(names_from = LAB_METH_CODE, values_from = NUMERIC_VALUE)  
+
+tex_psa_wide <- left_join(tex_psa_wide, tex_psa_totals, 
+                          by = c('PROJECT_CODE' , 'SITE_ID', 'OBS_NO', 
+                                 'HORIZON_NO', 'SAMPLE_NO', 'TEXTURE'))
+```
+
+`r dplyr::filter(tex_psa_totals, TOTAL_PSA > 105) %>% nrow()` results total over 105%. Its immediately apparent that many have duplicated data in two PSA size fractions, e.g.:
+
+```{r toobigdup}
+dplyr::filter(tex_psa_wide, TOTAL_PSA > 105) %>%
+  arrange(desc(TOTAL_PSA)) %>% 
+  select(TEXTURE, matches('^PSA_'), TOTAL_PSA) %>%
+           head()
+```
+
+These can only be resolved manually with reference to full descriptions, and even then it can be hard to tell what to do. For the purposes of this ranking exercise, I'm just going to filter out anything that totals over 105%.
+
+A similar issue exists for samples that total less than 95% (n = `r dplyr::filter(tex_psa_wide, TOTAL_PSA < 95) %>% nrow()`):
+
+```{r toolowdup}
+dplyr::filter(tex_psa_wide, TOTAL_PSA < 95) %>% 
+  select(TEXTURE, matches('^PSA_'), TOTAL_PSA) %>%
+           head()
+```
+
+Some are missing data (particularly in the sand fractions), a few add to 0, and the rest are just a bit weird. They can go as well (note: this data is already in a queue to be corrected, behind a long line of other tasks). 
+
+Along with removing samples from horizons without a texture code, and samples with too many missing components, and a couple of dud texture codes,
+
+```{r tidy}
+tex_psa_clean <- tex_psa_wide %>%
+  dplyr::filter(TOTAL_PSA <= 105) %>% 
+  dplyr::filter(TOTAL_PSA >= 95) %>%
+  dplyr::filter(N_COMP > 2) %>% 
+  dplyr::filter(!is.na(TEXTURE)) %>% 
+  dplyr::filter(!(TEXTURE %in% c('-', '+'))) %>% 
+  mutate_at(vars(matches('^PSA_')), replace_na, 0) 
+
+# per above, remaining NAs are almost certainly legit 0s e.g. no clay measured
+# on a coarse sand texture sample
+```
+
+`r nrow(tex_psa_clean)` data points remain. Good enough to go on with.
+
+It's still kind of hard to rank this data. McNeill (2018) contains some treatments for mapping ternary PSA data back to a cartesian space, removing the structural correlation that comes from all the fractions having to add to 100%. These might help. A 'Not_Clay' percentage may also be useful. 
+
+```{r hmmm}
+tex_psa_norm <- tex_psa_clean %>% 
+  # first normalise
+  mutate_at(vars(matches('^PSA_')), function(x)  {x / .$TOTAL_PSA * 100 } ) %>% 
+  rowwise() %>% 
+  mutate(Not_Clay = sum(c(PSA_Silt, PSA_FS, PSA_CS)),
+         TOTAL_PSA = sum(c(PSA_Clay, PSA_Silt, PSA_FS, PSA_CS))) %>% 
+  ungroup() %>% 
+  mutate_at(vars(matches('^PSA_'), TOTAL_PSA), round) %>% 
+  select(-N_COMP) %>% 
+  # now calc w1 and w2
+  rowwise() %>% 
+  mutate(W1 = (2 * sum(c(PSA_FS, PSA_CS))) - PSA_Silt - PSA_Clay,
+         W2 = PSA_Silt - PSA_Clay) %>% 
+  ungroup() %>% 
+  arrange(W1, W2)
+  
+```
+
+With this dataset, some summary statistics can be calculated by texture code:
+
+```{r cleansum}
+texcode_stats <- tex_psa_norm %>% 
+  group_by(TEXTURE) %>% 
+  summarise(Q16_CLAY = round(quantile(PSA_Clay, 0.159, na.rm = TRUE), 1),
+            MED_CLAY = round(median(PSA_Clay, na.rm = TRUE), 1),
+            Q84_CLAY = round(quantile(PSA_Clay, 0.841, na.rm = TRUE), 1),
+            Q16_SILT = round(quantile(PSA_Silt, 0.159, na.rm = TRUE), 1),
+            MED_SILT = round(median(PSA_Silt, na.rm = TRUE), 1),
+            Q84_SILT = round(quantile(PSA_Silt, 0.841, na.rm = TRUE), 1),
+            Q16_FSND = round(quantile(PSA_FS, 0.159, na.rm = TRUE), 1),
+            MED_FSND = round(median(PSA_FS, na.rm = TRUE), 1),
+            Q84_FSND = round(quantile(PSA_FS, 0.841, na.rm = TRUE), 1),
+            Q16_CSND = round(quantile(PSA_CS, 0.159, na.rm = TRUE), 1),
+            MED_CSND = round(median(PSA_CS, na.rm = TRUE), 1),
+            Q84_CSND = round(quantile(PSA_CS, 0.841, na.rm = TRUE), 1),
+            Q16_NCLY = round(quantile(Not_Clay, 0.159, na.rm = TRUE), 1),
+            MED_NCLY = round(median(Not_Clay, na.rm = TRUE), 1),
+            Q84_NCLY = round(quantile(Not_Clay, 0.841, na.rm = TRUE), 1),
+            Q16_W1   = round(quantile(W1, 0.159, na.rm = TRUE)),
+            MED_W1   = round(median(W1, na.rm = TRUE)),
+            Q84_W1   = round(quantile(W1, 0.841, na.rm = TRUE)),        
+            Q16_W2   = round(quantile(W2, 0.159, na.rm = TRUE)),
+            MED_W2   = round(median(W2, na.rm = TRUE)),
+            Q84_W2   = round(quantile(W2, 0.841, na.rm = TRUE)), 
+            N_CLAY   = sum(!is.na(PSA_Clay)),
+            N_SILT   = sum(!is.na(PSA_Silt)),
+            N_FSND   = sum(!is.na(PSA_FS)),
+            N_CSND   = sum(!is.na(PSA_CS))) %>% 
+  # rank sandiest to clayeyest
+  arrange(desc(MED_NCLY), MED_CLAY)
+
+stats_simple <- texcode_stats %>%  
+  dplyr::select(TEXTURE, MED_CLAY, MED_SILT, MED_FSND, MED_CSND,
+                MED_NCLY, MED_W1, MED_W2, N_CLAY) %>% 
+  mutate(MED_SUM = rowSums(select(., MED_CLAY, MED_NCLY)))
+
+write_csv(texcode_stats, file.path(getwd(), 'SALI_DATA', 'tex_psa_wide.csv'))
+write_csv(stats_simple, file.path(getwd(), 'SALI_DATA', 'tex_psa_simple.csv'))
+```
+
+A ternary plot for each texture code should be useful.
+
+```{r ternpl}
+codes <- sort(unique(texcode_stats$TEXTURE))
+
+psa_plots <- lapply(codes, function(x) {
+  
+  texs <- dplyr::filter(tex_psa_norm, TEXTURE == x) %>% 
+  rowwise() %>% 
+  mutate(SAND = sum(c(PSA_CS, PSA_FS), na.rm = TRUE)) %>% 
+  ungroup()
+  
+  nt <- nrow(texs)
+  med_tex <- summarise_all(texs, median)
+  
+  ggtern(data = texs, 
+       aes(y = PSA_Clay, z = PSA_Silt, x = SAND), colour = 'grey50',
+       show.legend = FALSE) + 
+  geom_point(size = 1, shape = 16, alpha = 0.25) +
+  geom_point(data = med_tex, col = 'red', size = 3, shape = 16) +
+  ggtitle(paste0('SALI PSA Data, Texture Code ', x, '.'),
+          subtitle = paste0('n = ', nt, '. Median in red.')) +
+  labs(x = "Sand %", y = 'Clay %', z = 'Silt %') +
+  theme_minimal()
+  
+})
+names(psa_plots) <- codes
+
+# e.g.
+psa_plots[['SCL']]
+
+saveRDS(psa_plots, file.path(getwd(), 'DERIVED_DATA', 'PSA_PLOTS.rds' ))
+```
+
+Plot medians by rank too:
+
+```{r simplot, results = 'as-is'}
+tex_ranks <- 
+  read_csv(file.path(getwd(), 'helpers', 'SALI_TEXTURES_RANKED_2.csv'))
+
+stplot <- tex_psa_norm %>% 
+  rowwise() %>% 
+  mutate(PSA_Sand = sum(c(PSA_CS, PSA_FS), na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  select(-PROJECT_CODE, -SITE_ID, -OBS_NO, -HORIZON_NO, -SAMPLE_NO) %>% 
+  group_by(TEXTURE) %>% 
+  summarise_if(is.numeric, median, na.rm = TRUE) %>% 
+  left_join(., tex_ranks[, c('TEXTURE', 'GROUP_1', 'GROUP_2', 'GROUP_3',
+                             'GROUP_4', 'FINAL_RANK')], by = 'TEXTURE') 
+
+ggtern(data = stplot, 
+       aes(y = PSA_Clay, z = PSA_Silt, x = PSA_Sand, colour = FINAL_RANK),
+       show.legend = FALSE) + 
+  geom_point(size = 2, shape = 16) +
+  scale_colour_viridis_c() + 
+  ggtitle('SALI PSA data, median values coloured by rank') +
+  labs(x = "Sand %", y = 'Clay %', z = 'Silt %', colour = 'Rank') +
+  theme_minimal()
+
+# couple of outliers:
+filter(stplot, FINAL_RANK < 150 & PSA_Clay > 50 )
+# LMS is a typo for LMC I'm p sure - have emailed about it
+# ZCLI is on CQA 208 - marine mud, with MC either side and no discont. Maybe 
+# a typo for ZLCI, or an underestimate thanks to being saturated.
+# good enough, pitter patter
+
+```
+

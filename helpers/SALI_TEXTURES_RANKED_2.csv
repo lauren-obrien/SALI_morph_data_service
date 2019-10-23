@@ -1,0 +1,300 @@
+TEXTURE,TEXTURE_CODE,TEXTURE_QUALIFIER,DESCRIPTION,GROUP_1,GROUP_2,GROUP_3,GROUP_4,N_CODES,FINAL_RANK
+GR-,GR,-,gravel,gravel,gravel,gravel,gravel,1,1
+GR,GR,NA,gravel,gravel,gravel,gravel,gravel,35,2
+ST,ST,NA,stones,gravel,gravel,gravel,gravel,2,3
+GR+,GR,+,gravel,gravel,gravel,gravel,gravel,2,4
+KS-,KS,-,coarse sand,sand,sand,"sand, coarse","light sand, coarse",1,5
+KSA,KS,A,coarse sand,sand,sand,"sand, coarse","sapric sand, coarse",2,6
+KS,KS,NA,coarse sand,sand,sand,"sand, coarse","sand, coarse",4178,7
+KSS,KSS,NA,coarse pure sand,sand,sand,"sand, coarse","sand, coarse",1,8
+KSI,KS,I,coarse sand,sand,sand,"sand, coarse","fibric sand, coarse",4,9
+KS+,KS,+,coarse sand,sand,sand,"sand, coarse","heavy sand, coarse",63,10
+S-,S,-,sand,sand,sand,"sand, medium","light sand, medium",3,11
+SA,S,A,sand,sand,sand,"sand, medium","sapric sand, medium",11,12
+MS,MS,NA,medium sand,sand,sand,"sand, medium","sand, medium",24,13
+S,S,NA,sand,sand,sand,"sand, medium","sand, medium",9999,14
+SS,SS,NA,pure sand,sand,sand,"sand, medium","sand, medium",5,15
+SI,S,I,sand,sand,sand,"sand, medium","fibric sand, medium",7,16
+S+,S,+,sand,sand,sand,"sand, medium","heavy sand, medium",134,17
+FS-,FS,-,fine sand,sand,sand,"sand, fine","light sand, fine",1,18
+FS,FS,NA,fine sand,sand,sand,"sand, fine","sand, fine",2676,19
+FSI,FS,I,fine sand,sand,sand,"sand, fine","fibric sand, fine",4,20
+FS+,FS,+,fine sand,sand,sand,"sand, fine","heavy sand, fine",5,21
+LKS-,LKS,-,loamy coarse sand,sand,loamy sand,"loamy sand, coarse","light loamy sand, coarse",69,22
+LKSA,LKS,A,loamy coarse sand,sand,loamy sand,"loamy sand, coarse","sapric loamy sand, coarse",13,23
+LKS,LKS,NA,loamy coarse sand,sand,loamy sand,"loamy sand, coarse","loamy sand, coarse",2101,24
+LKS+,LKS,+,loamy coarse sand,sand,loamy sand,"loamy sand, coarse","heavy loamy sand, coarse",62,25
+LMS-,LMS,-,loamy medium sand,sand,loamy sand,"loamy sand, medium","light loamy sand, medium",1,26
+LS-,LS,-,loamy sand,sand,loamy sand,"loamy sand, medium","light loamy sand, medium",210,27
+LSA,LS,A,loamy sand,sand,loamy sand,"loamy sand, medium","sapric loamy sand, medium",43,28
+LMS,LMS,NA,loamy medium sand,sand,loamy sand,"loamy sand, medium","loamy sand, medium",2,29
+LS,LS,NA,loamy sand,sand,loamy sand,"loamy sand, medium","loamy sand, medium",13188,30
+LSI,LS,I,loamy sand,sand,loamy sand,"loamy sand, medium","fibric loamy sand, medium",9,31
+LS+,LS,+,loamy sand,sand,loamy sand,"loamy sand, medium","heavy loamy sand, medium",404,32
+LFS-,LFS,-,loamy fine sand,sand,loamy sand,"loamy sand, fine","light loamy sand, fine",30,33
+LFSA,LFS,A,loamy fine sand,sand,loamy sand,"loamy sand, fine","sapric loamy sand, fine",6,34
+LFS,LFS,NA,loamy fine sand,sand,loamy sand,"loamy sand, fine","loamy sand, fine",2671,35
+LFSI,LFS,I,loamy fine sand,sand,loamy sand,"loamy sand, fine","fibric loamy sand, fine",3,36
+LFS+,LFS,+,loamy fine sand,sand,loamy sand,"loamy sand, fine","heavy loamy sand, fine",134,37
+CKS-,CKS,-,clayey coarse sand,sand,clayey sand,"clayey sand, coarse","light clayey sand, coarse",12,38
+CKSA,CKS,A,clayey coarse sand,sand,clayey sand,"clayey sand, coarse","sapric clayey sand, coarse",1,39
+CKS,CKS,NA,clayey coarse sand,sand,clayey sand,"clayey sand, coarse","clayey sand, coarse",1112,40
+CKSI,CKS,I,clayey coarse sand,sand,clayey sand,"clayey sand, coarse","fibric clayey sand, coarse",2,41
+CKS+,CKS,+,clayey coarse sand,sand,clayey sand,"clayey sand, coarse","heavy clayey sand, coarse",32,42
+CS-,CS,-,clayey sand,sand,clayey sand,"clayey sand, medium","light clayey sand, medium",82,43
+CSA,CS,A,clayey sand,sand,clayey sand,"clayey sand, medium","sapric clayey sand, medium",5,44
+CS,CS,NA,clayey sand,sand,clayey sand,"clayey sand, medium","clayey sand, medium",3365,45
+CSI,CS,I,clayey sand,sand,clayey sand,"clayey sand, medium","fibric clayey sand, medium",3,46
+CS+,CS,+,clayey sand,sand,clayey sand,"clayey sand, medium","heavy clayey sand, medium",153,47
+CFS-,CFS,-,clayey fine sand,sand,clayey sand,"clayey sand, fine","light clayey sand, fine",12,48
+CFS,CFS,NA,clayey fine sand,sand,clayey sand,"clayey sand, fine","clayey sand, fine",534,49
+CFS+,CFS,+,clayey fine sand,sand,clayey sand,"clayey sand, fine","heavy clayey sand, fine",23,50
+GP,GP,NA,granular peat,peat,peat,"peat, coarse","peat, coarse",1,51
+IP,IP,NA,fibric peat,peat,peat,"peat, coarse","peat, coarse",131,52
+IPI,IP,I,fibric peat,peat,peat,"peat, coarse","peat, coarse",2,53
+HP,HP,NA,hemic peat,peat,peat,"peat, medium","peat, medium",66,54
+HPI,HP,I,hemic peat,peat,peat,"peat, medium","peat, medium",1,55
+APA,AP,A,sapric peat,peat,peat,"peat, fine","peat, fine",1,56
+AP,AP,NA,sapric peat,peat,peat,"peat, fine","peat, fine",102,57
+SP,SP,NA,sandy peat,peat,mineral peat,"mineral peat, coarse","mineral peat, coarse",9,58
+LP,LP,NA,loamy peat,peat,mineral peat,"mineral peat, medium","mineral peat, medium",28,59
+CP,CP,NA,clayey peat,peat,mineral peat,"mineral peat, fine","mineral peat, fine",2,60
+KSL-,KSL,-,coarse sandy loam,loam,sandy loam,"sandy loam, coarse","light sandy loam, coarse",115,61
+KSLA,KSL,A,coarse sandy loam,loam,sandy loam,"sandy loam, coarse","sapric sandy loam, coarse",3,62
+KSL,KSL,NA,coarse sandy loam,loam,sandy loam,"sandy loam, coarse","sandy loam, coarse",1995,63
+KSLI,KSL,I,coarse sandy loam,loam,sandy loam,"sandy loam, coarse","fibric sandy loam, coarse",6,64
+KSL+,KSL,+,coarse sandy loam,loam,sandy loam,"sandy loam, coarse","heavy sandy loam, coarse",124,65
+SL-,SL,-,sandy loam,loam,sandy loam,"sandy loam, medium","light sandy loam, medium",746,66
+SLA,SL,A,sandy loam,loam,sandy loam,"sandy loam, medium","sapric sandy loam, medium",54,67
+SL,SL,NA,sandy loam,loam,sandy loam,"sandy loam, medium","sandy loam, medium",15076,68
+SLI,SL,I,sandy loam,loam,sandy loam,"sandy loam, medium","fibric sandy loam, medium",38,69
+SL+,SL,+,sandy loam,loam,sandy loam,"sandy loam, medium","heavy sandy loam, medium",1170,70
+FSL-,FSL,-,fine sandy loam,loam,sandy loam,"sandy loam, fine","light sandy loam, fine",248,71
+FSLA,FSL,A,fine sandy loam,loam,sandy loam,"sandy loam, fine","sapric sandy loam, fine",10,72
+FSL,FSL,NA,fine sandy loam,loam,sandy loam,"sandy loam, fine","sandy loam, fine",6722,73
+FSLZ,FSLZ,NA,fine sandy loam; silty,loam,sandy loam,"sandy loam, fine","sandy loam, fine",1,74
+SLZ,SLZ,NA,sandy loam; silty,loam,sandy loam,"sandy loam, fine","sandy loam, fine",3,75
+FSLI,FSL,I,fine sandy loam,loam,sandy loam,"sandy loam, fine","fibric sandy loam, fine",13,76
+FSL+,FSL,+,fine sandy loam,loam,sandy loam,"sandy loam, fine","heavy sandy loam, fine",444,77
+LSY-,LSY,-,loam; sandy,loam,loam,"loam, sandy","light loam, sandy",1,78
+LSY,LSY,NA,loam; sandy,loam,loam,"loam, sandy","loam, sandy",33,79
+LSY+,LSY,+,loam; sandy,loam,loam,"loam, sandy","heavy loam, sandy",1,80
+LFSY-,LFSY,-,loam; fine sandy,loam,loam,"loam, sandy, fine","light loam, sandy, fine",49,81
+LFSY,LFSY,NA,loam; fine sandy,loam,loam,"loam, sandy, fine","loam, sandy, fine",3555,82
+LFSYZ,LFSYZ,NA,loam; fine sandy; silty,loam,loam,"loam, sandy, fine","loam, sandy, fine",6,83
+LFSYI,LFSY,I,loam; fine sandy,loam,loam,"loam, sandy, fine","fibric loam, sandy, fine",1,84
+LFSY+,LFSY,+,loam; fine sandy,loam,loam,"loam, sandy, fine","heavy loam, sandy, fine",172,85
+L-,L,-,loam,loam,loam,loam,light loam,24,86
+LA,L,A,loam,loam,loam,loam,sapric loam,93,87
+L,L,NA,loam,loam,loam,loam,loam,1968,88
+LI,L,I,loam,loam,loam,loam,fibric loam,106,89
+L+,L,+,loam,loam,loam,loam,heavy loam,205,90
+KSCL-,KSCL,-,coarse sandy clay loam,loam,sandy clay loam,"sandy clay loam, coarse","light sandy clay loam, coarse",366,91
+KSCLA,KSCL,A,coarse sandy clay loam,loam,sandy clay loam,"sandy clay loam, coarse","sapric sandy clay loam, coarse",6,92
+KSCL,KSCL,NA,coarse sandy clay loam,loam,sandy clay loam,"sandy clay loam, coarse","sandy clay loam, coarse",1524,93
+KSCLI,KSCL,I,coarse sandy clay loam,loam,sandy clay loam,"sandy clay loam, coarse","fibric sandy clay loam, coarse",5,94
+KSCL+,KSCL,+,coarse sandy clay loam,loam,sandy clay loam,"sandy clay loam, coarse","heavy sandy clay loam, coarse",120,95
+MSCL-,MSCL,-,medium sandy clay loam,loam,sandy clay loam,"sandy clay loam, medium","light sandy clay loam, medium",2,96
+SCL-,SCL,-,sandy clay loam,loam,sandy clay loam,"sandy clay loam, medium","light sandy clay loam, medium",3663,97
+SCLA,SCL,A,sandy clay loam,loam,sandy clay loam,"sandy clay loam, medium","sapric sandy clay loam, medium",60,98
+SCL,SCL,NA,sandy clay loam,loam,sandy clay loam,"sandy clay loam, medium","sandy clay loam, medium",17080,99
+SCLI,SCL,I,sandy clay loam,loam,sandy clay loam,"sandy clay loam, medium","fibric sandy clay loam, medium",48,100
+SCL+,SCL,+,sandy clay loam,loam,sandy clay loam,"sandy clay loam, medium","heavy sandy clay loam, medium",1503,101
+FSCL-,FSCL,-,fine sandy clay loam,loam,sandy clay loam,"sandy clay loam, fine","light sandy clay loam, fine",810,102
+SCLFS-,SCLFS,-,sandy clay loam; fine sandy,loam,sandy clay loam,"sandy clay loam, fine","light sandy clay loam, fine",10,103
+FSCLA,FSCL,A,fine sandy clay loam,loam,sandy clay loam,"sandy clay loam, fine","sapric sandy clay loam, fine",22,104
+FSCL,FSCL,NA,fine sandy clay loam,loam,sandy clay loam,"sandy clay loam, fine","sandy clay loam, fine",8080,105
+FSCLZ,FSCLZ,NA,fine sandy clay loam; silty,loam,sandy clay loam,"sandy clay loam, fine","sandy clay loam, fine",10,106
+SCLFS,SCLFS,NA,sandy clay loam; fine sandy,loam,sandy clay loam,"sandy clay loam, fine","sandy clay loam, fine",179,107
+FSCLI,FSCL,I,fine sandy clay loam,loam,sandy clay loam,"sandy clay loam, fine","fibric sandy clay loam, fine",23,108
+FSCL+,FSCL,+,fine sandy clay loam,loam,sandy clay loam,"sandy clay loam, fine","heavy sandy clay loam, fine",448,109
+FSCLZ+,FSCLZ,+,fine sandy clay loam; silty,loam,sandy clay loam,"sandy clay loam, fine","heavy sandy clay loam, fine",3,110
+SCLFS+,SCLFS,+,sandy clay loam; fine sandy,loam,sandy clay loam,"sandy clay loam, fine","heavy sandy clay loam, fine",8,111
+ZL-,ZL,-,silty loam,loam,silty loam,silty loam,light silty loam,11,112
+ZLA,ZL,A,silty loam,loam,silty loam,silty loam,sapric silty loam,7,113
+ZL,ZL,NA,silty loam,loam,silty loam,silty loam,silty loam,850,114
+ZLI,ZL,I,silty loam,loam,silty loam,silty loam,fibric silty loam,35,115
+ZL+,ZL,+,silty loam,loam,silty loam,silty loam,heavy silty loam,51,116
+CLKS-,CLKS,-,"clay loam, coarse sandy",clay loam,"clay loam, sandy","clay loam, sandy, coarse","light clay loam, sandy, coarse",44,117
+CLKSA,CLKS,A,"clay loam, coarse sandy",clay loam,"clay loam, sandy","clay loam, sandy, coarse","sapric clay loam, sandy, coarse",1,118
+CLKS,CLKS,NA,"clay loam, coarse sandy",clay loam,"clay loam, sandy","clay loam, sandy, coarse","clay loam, sandy, coarse",790,119
+CLKSI,CLKS,I,"clay loam, coarse sandy",clay loam,"clay loam, sandy","clay loam, sandy, coarse","fibric clay loam, sandy, coarse",1,120
+CLKS+,CLKS,+,"clay loam, coarse sandy",clay loam,"clay loam, sandy","clay loam, sandy, coarse","heavy clay loam, sandy, coarse",62,121
+CLS-,CLS,-,"clay loam, sandy",clay loam,"clay loam, sandy","clay loam, sandy, medium","light clay loam, sandy, medium",182,122
+CLSA,CLS,A,"clay loam, sandy",clay loam,"clay loam, sandy","clay loam, sandy, medium","sapric clay loam, sandy, medium",35,123
+CLMS,CLMS,NA,"clay loam, medium sandy",clay loam,"clay loam, sandy","clay loam, sandy, medium","clay loam, sandy, medium",7,124
+CLS,CLS,NA,"clay loam, sandy",clay loam,"clay loam, sandy","clay loam, sandy, medium","clay loam, sandy, medium",6173,125
+CLSI,CLS,I,"clay loam, sandy",clay loam,"clay loam, sandy","clay loam, sandy, medium","fibric clay loam, sandy, medium",13,126
+CLMS+,CLMS,+,"clay loam, medium sandy",clay loam,"clay loam, sandy","clay loam, sandy, medium","heavy clay loam, sandy, medium",3,127
+CLS+,CLS,+,"clay loam, sandy",clay loam,"clay loam, sandy","clay loam, sandy, medium","heavy clay loam, sandy, medium",394,128
+CLFS-,CLFS,-,"clay loam, fine sandy",clay loam,"clay loam, sandy","clay loam, sandy, fine","light clay loam, sandy, fine",716,129
+CLFSZ-,CLFSZ,-,clay loam; fine sandy; silty,clay loam,"clay loam, sandy","clay loam, sandy, fine","light clay loam, sandy, fine",1,130
+CLFSA,CLFS,A,"clay loam, fine sandy",clay loam,"clay loam, sandy","clay loam, sandy, fine","sapric clay loam, sandy, fine",41,131
+CLFS,CLFS,NA,"clay loam, fine sandy",clay loam,"clay loam, sandy","clay loam, sandy, fine","clay loam, sandy, fine",12466,132
+CLFSZ,CLFSZ,NA,clay loam; fine sandy; silty,clay loam,"clay loam, sandy","clay loam, sandy, fine","clay loam, sandy, fine",14,133
+CLFSI,CLFS,I,"clay loam, fine sandy",clay loam,"clay loam, sandy","clay loam, sandy, fine","fibric clay loam, sandy, fine",8,134
+CLFS+,CLFS,+,"clay loam, fine sandy",clay loam,"clay loam, sandy","clay loam, sandy, fine","heavy clay loam, sandy, fine",942,135
+CLFSZ+,CLFSZ,+,clay loam; fine sandy; silty,clay loam,"clay loam, sandy","clay loam, sandy, fine","heavy clay loam, sandy, fine",4,136
+CL-,CL,-,clay loam,clay loam,clay loam,clay loam,light clay loam,587,137
+CLA,CL,A,clay loam,clay loam,clay loam,clay loam,sapric clay loam,192,138
+CL,CL,NA,clay loam,clay loam,clay loam,clay loam,clay loam,15395,139
+CLI,CL,I,clay loam,clay loam,clay loam,clay loam,fibric clay loam,174,140
+CL+,CL,+,clay loam,clay loam,clay loam,clay loam,heavy clay loam,2425,141
+ZCL-,ZCL,-,silty clay loam,clay loam,"clay loam, silty","clay loam, silty","light clay loam, silty",134,142
+ZCLA,ZCL,A,silty clay loam,clay loam,"clay loam, silty","clay loam, silty","sapric clay loam, silty",36,143
+CLZ,CLZ,NA,clay loam; silty,clay loam,"clay loam, silty","clay loam, silty","clay loam, silty",27,144
+ZCL,ZCL,NA,silty clay loam,clay loam,"clay loam, silty","clay loam, silty","clay loam, silty",3521,145
+ZCLI,ZCL,I,silty clay loam,clay loam,"clay loam, silty","clay loam, silty","fibric clay loam, silty",41,146
+CLZ+,CLZ,+,clay loam; silty,clay loam,"clay loam, silty","clay loam, silty","heavy clay loam, silty",4,147
+ZCL+,ZCL,+,silty clay loam,clay loam,"clay loam, silty","clay loam, silty","heavy clay loam, silty",303,148
+KSCA,KSC,A,coarse sandy; clay,clay,light clay,"light clay, sandy, coarse","sapric light clay, sandy, coarse",3,149
+KSC-,KSC,-,coarse sandy; clay,clay,light clay,"light clay, sandy, coarse","light clay, sandy, coarse",30,150
+KSLC-,KSLC,-,coarse sandy light clay,clay,light clay,"light clay, sandy, coarse","light clay, sandy, coarse",46,151
+CSC,CSC,NA,coarse sandy clay,clay,light clay,"light clay, sandy, coarse","light clay, sandy, coarse",6,152
+KSC,KSC,NA,coarse sandy; clay,clay,light clay,"light clay, sandy, coarse","light clay, sandy, coarse",514,153
+KSLC,KSLC,NA,coarse sandy light clay,clay,light clay,"light clay, sandy, coarse","light clay, sandy, coarse",1326,154
+LCKS,LCKS,NA,light clay; coarse sandy,clay,light clay,"light clay, sandy, coarse","light clay, sandy, coarse",52,155
+KSC+,KSC,+,coarse sandy; clay,clay,light clay,"light clay, sandy, coarse","light clay, sandy, coarse",16,156
+KSLC+,KSLC,+,coarse sandy light clay,clay,light clay,"light clay, sandy, coarse","light clay, sandy, coarse",36,157
+LCKS+,LCKS,+,light clay; coarse sandy,clay,light clay,"light clay, sandy, coarse","light clay, sandy, coarse",1,158
+KSLCI,KSLC,I,coarse sandy light clay,clay,light clay,"light clay, sandy, coarse","fibric light clay, sandy, coarse",5,159
+LCSA,LCS,A,light clay; sandy,clay,light clay,"light clay, sandy, medium","sapric light clay, sandy, medium",5,160
+SCA,SC,A,sandy clay,clay,light clay,"light clay, sandy, medium","sapric light clay, sandy, medium",1,161
+SLCA,SLC,A,sandy light clay,clay,light clay,"light clay, sandy, medium","sapric light clay, sandy, medium",12,162
+LCS-,LCS,-,light clay; sandy,clay,light clay,"light clay, sandy, medium","light clay, sandy, medium",1,163
+SC-,SC,-,sandy clay,clay,light clay,"light clay, sandy, medium","light clay, sandy, medium",336,164
+SLC-,SLC,-,sandy light clay,clay,light clay,"light clay, sandy, medium","light clay, sandy, medium",145,165
+LCS,LCS,NA,light clay; sandy,clay,light clay,"light clay, sandy, medium","light clay, sandy, medium",131,166
+MSC,MSC,NA,medium sandy clay,clay,light clay,"light clay, sandy, medium","light clay, sandy, medium",6,167
+SC,SC,NA,sandy clay,clay,light clay,"light clay, sandy, medium","light clay, sandy, medium",4726,168
+SLC,SLC,NA,sandy light clay,clay,light clay,"light clay, sandy, medium","light clay, sandy, medium",6196,169
+LCS+,LCS,+,light clay; sandy,clay,light clay,"light clay, sandy, medium","light clay, sandy, medium",4,170
+SC+,SC,+,sandy clay,clay,light clay,"light clay, sandy, medium","light clay, sandy, medium",221,171
+SLC+,SLC,+,sandy light clay,clay,light clay,"light clay, sandy, medium","light clay, sandy, medium",108,172
+SLCI,SLC,I,sandy light clay,clay,light clay,"light clay, sandy, medium","fibric light clay, sandy, medium",42,173
+FSLCA,FSLC,A,fine sandy light clay,clay,light clay,"light clay, sandy, fine","sapric light clay, sandy, fine",17,174
+FSC-,FSC,-,fine sandy clay,clay,light clay,"light clay, sandy, fine","light clay, sandy, fine",167,175
+FSLC-,FSLC,-,fine sandy light clay,clay,light clay,"light clay, sandy, fine","light clay, sandy, fine",171,176
+LCFS-,LCFS,-,light clay; fine sandy,clay,light clay,"light clay, sandy, fine","light clay, sandy, fine",7,177
+FSC,FSC,NA,fine sandy clay,clay,light clay,"light clay, sandy, fine","light clay, sandy, fine",2802,178
+FSLC,FSLC,NA,fine sandy light clay,clay,light clay,"light clay, sandy, fine","light clay, sandy, fine",5900,179
+LCFS,LCFS,NA,light clay; fine sandy,clay,light clay,"light clay, sandy, fine","light clay, sandy, fine",226,180
+FSC+,FSC,+,fine sandy clay,clay,light clay,"light clay, sandy, fine","light clay, sandy, fine",62,181
+FSLC+,FSLC,+,fine sandy light clay,clay,light clay,"light clay, sandy, fine","light clay, sandy, fine",109,182
+LCFS+,LCFS,+,light clay; fine sandy,clay,light clay,"light clay, sandy, fine","light clay, sandy, fine",7,183
+FSCI,FSC,I,fine sandy clay,clay,light clay,"light clay, sandy, fine","fibric light clay, sandy, fine",1,184
+FSLCI,FSLC,I,fine sandy light clay,clay,light clay,"light clay, sandy, fine","fibric light clay, sandy, fine",14,185
+LCFSI,LCFS,I,light clay; fine sandy,clay,light clay,"light clay, sandy, fine","fibric light clay, sandy, fine",2,186
+LCA,LC,A,light clay,clay,light clay,light clay,sapric light clay,119,187
+LC-,LC,-,light clay,clay,light clay,light clay,light clay,1134,188
+FSLCZ,FSLCZ,NA,fine sandy light clay; silty,clay,light clay,light clay,light clay,3,189
+LC,LC,NA,light clay,clay,light clay,light clay,light clay,37856,190
+ZLCFS,ZLCFS,NA,"silty light clay, fine sandy",clay,light clay,light clay,light clay,7,191
+LC+,LC,+,light clay,clay,light clay,light clay,light clay,1973,192
+LCO,LC,O,light clay,clay,light clay,light clay,light clay,1,193
+LCI,LC,I,light clay,clay,light clay,light clay,fibric light clay,185,194
+ZCA,ZC,A,silty clay,clay,light clay,"light clay, silty","sapric light clay, silty",5,195
+ZLCA,ZLC,A,silty light clay,clay,light clay,"light clay, silty","sapric light clay, silty",52,196
+ZC-,ZC,-,silty clay,clay,light clay,"light clay, silty","light clay, silty",38,197
+ZLC-,ZLC,-,silty light clay,clay,light clay,"light clay, silty","light clay, silty",77,198
+LCZ,LCZ,NA,light clay; silty,clay,light clay,"light clay, silty","light clay, silty",43,199
+ZC,ZC,NA,silty clay,clay,light clay,"light clay, silty","light clay, silty",1141,200
+ZLC,ZLC,NA,silty light clay,clay,light clay,"light clay, silty","light clay, silty",5052,201
+LCZ+,LCZ,+,light clay; silty,clay,light clay,"light clay, silty","light clay, silty",2,202
+ZC+,ZC,+,silty clay,clay,light clay,"light clay, silty","light clay, silty",55,203
+ZLC+,ZLC,+,silty light clay,clay,light clay,"light clay, silty","light clay, silty",31,204
+ZCI,ZC,I,silty clay,clay,light clay,"light clay, silty","fibric light clay, silty",6,205
+ZLCI,ZLC,I,silty light clay,clay,light clay,"light clay, silty","fibric light clay, silty",206,206
+KSLMC-,KSLMC,-,coarse sandy light medium clay,clay,light medium clay,"light medium clay, sandy, coarse","light medium clay, sandy, coarse",15,207
+KSLMC,KSLMC,NA,coarse sandy light medium clay,clay,light medium clay,"light medium clay, sandy, coarse","light medium clay, sandy, coarse",968,208
+LMCKS,LMCKS,NA,light medium clay; coarse sandy,clay,light medium clay,"light medium clay, sandy, coarse","light medium clay, sandy, coarse",45,209
+KSLMC+,KSLMC,+,coarse sandy light medium clay,clay,light medium clay,"light medium clay, sandy, coarse","light medium clay, sandy, coarse",43,210
+SLMCA,SLMC,A,sandy light medium clay,clay,light medium clay,"light medium clay, sandy, medium","sapric light medium clay, sandy, medium",2,211
+SLMC-,SLMC,-,sandy light medium clay,clay,light medium clay,"light medium clay, sandy, medium","light medium clay, sandy, medium",24,212
+LMCS,LMCS,NA,light medium clay; sandy,clay,light medium clay,"light medium clay, sandy, medium","light medium clay, sandy, medium",124,213
+SLMC,SLMC,NA,sandy light medium clay,clay,light medium clay,"light medium clay, sandy, medium","light medium clay, sandy, medium",3940,214
+SLMC+,SLMC,+,sandy light medium clay,clay,light medium clay,"light medium clay, sandy, medium","light medium clay, sandy, medium",60,215
+SLMCI,SLMC,I,sandy light medium clay,clay,light medium clay,"light medium clay, sandy, medium","fibric light medium clay, sandy, medium",1,216
+FSLMCA,FSLMC,A,fine sandy light medium clay,clay,light medium clay,"light medium clay, sandy, fine","sapric light medium clay, sandy, fine",2,217
+FSLMC-,FSLMC,-,fine sandy light medium clay,clay,light medium clay,"light medium clay, sandy, fine","light medium clay, sandy, fine",45,218
+FSLMC,FSLMC,NA,fine sandy light medium clay,clay,light medium clay,"light medium clay, sandy, fine","light medium clay, sandy, fine",4028,219
+LMCFS,LMCFS,NA,light medium clay; fine sandy,clay,light medium clay,"light medium clay, sandy, fine","light medium clay, sandy, fine",208,220
+FSLMC+,FSLMC,+,fine sandy light medium clay,clay,light medium clay,"light medium clay, sandy, fine","light medium clay, sandy, fine",46,221
+LMCFS+,LMCFS,+,light medium clay; fine sandy,clay,light medium clay,"light medium clay, sandy, fine","light medium clay, sandy, fine",9,222
+FSLMCI,FSLMC,I,fine sandy light medium clay,clay,light medium clay,"light medium clay, sandy, fine","fibric light medium clay, sandy, fine",1,223
+LMCA,LMC,A,light medium clay,clay,light medium clay,light medium clay,sapric light medium clay,37,224
+LMC-,LMC,-,light medium clay,clay,light medium clay,light medium clay,light medium clay,381,225
+LMC,LMC,NA,light medium clay,clay,light medium clay,light medium clay,light medium clay,47407,226
+ZLMCS,ZLMCS,NA,silty light medium clay; sandy,clay,light medium clay,light medium clay,light medium clay,2,227
+LMC+,LMC,+,light medium clay,clay,light medium clay,light medium clay,light medium clay,1017,228
+LMCI,LMC,I,light medium clay,clay,light medium clay,light medium clay,fibric light medium clay,24,229
+ZLMCA,ZLMC,A,silty light medium clay,clay,light medium clay,"light medium clay, silty","sapric light medium clay, silty",5,230
+LMCZ,LMCZ,NA,light medium clay; silty,clay,light medium clay,"light medium clay, silty","light medium clay, silty",51,231
+ZLMC,ZLMC,NA,silty light medium clay,clay,light medium clay,"light medium clay, silty","light medium clay, silty",1769,232
+LMCZ+,LMCZ,+,light medium clay; silty,clay,light medium clay,"light medium clay, silty","light medium clay, silty",2,233
+ZLMC+,ZLMC,+,silty light medium clay,clay,light medium clay,"light medium clay, silty","light medium clay, silty",6,234
+ZLMCI,ZLMC,I,silty light medium clay,clay,light medium clay,"light medium clay, silty","fibric light medium clay, silty",34,235
+KSMC-,KSMC,-,coarse sandy medium clay,clay,medium clay,"medium clay, sandy, coarse","medium clay, sandy, coarse",34,236
+KSMC,KSMC,NA,coarse sandy medium clay,clay,medium clay,"medium clay, sandy, coarse","medium clay, sandy, coarse",733,237
+KSMC+,KSMC,+,coarse sandy medium clay,clay,medium clay,"medium clay, sandy, coarse","medium clay, sandy, coarse",26,238
+KSMCI,KSMC,I,coarse sandy medium clay,clay,medium clay,"medium clay, sandy, coarse","fibric medium clay, sandy, coarse",1,239
+SMCA,SMC,A,sandy medium clay,clay,medium clay,"medium clay, sandy, medium","sapric medium clay, sandy, medium",2,240
+MCS-,MCS,-,medium clay; sandy,clay,medium clay,"medium clay, sandy, medium","medium clay, sandy, medium",1,241
+SMC-,SMC,-,sandy medium clay,clay,medium clay,"medium clay, sandy, medium","medium clay, sandy, medium",43,242
+MCS,MCS,NA,medium clay; sandy,clay,medium clay,"medium clay, sandy, medium","medium clay, sandy, medium",139,243
+SMC,SMC,NA,sandy medium clay,clay,medium clay,"medium clay, sandy, medium","medium clay, sandy, medium",3277,244
+MCS+,MCS,+,medium clay; sandy,clay,medium clay,"medium clay, sandy, medium","medium clay, sandy, medium",1,245
+SMC+,SMC,+,sandy medium clay,clay,medium clay,"medium clay, sandy, medium","medium clay, sandy, medium",65,246
+SMCI,SMC,I,sandy medium clay,clay,medium clay,"medium clay, sandy, medium","fibric medium clay, sandy, medium",12,247
+FSMC-,FSMC,-,fine sandy medium clay,clay,medium clay,"medium clay, sandy, fine","medium clay, sandy, fine",25,248
+FSMC,FSMC,NA,fine sandy medium clay,clay,medium clay,"medium clay, sandy, fine","medium clay, sandy, fine",2465,249
+MCFS,MCFS,NA,medium clay; fine sandy,clay,medium clay,"medium clay, sandy, fine","medium clay, sandy, fine",189,250
+FSMC+,FSMC,+,fine sandy medium clay,clay,medium clay,"medium clay, sandy, fine","medium clay, sandy, fine",82,251
+MCFS+,MCFS,+,medium clay; fine sandy,clay,medium clay,"medium clay, sandy, fine","medium clay, sandy, fine",1,252
+FSMCI,FSMC,I,fine sandy medium clay,clay,medium clay,"medium clay, sandy, fine","fibric medium clay, sandy, fine",4,253
+MCA,MC,A,medium clay,clay,medium clay,medium clay,sapric medium clay,24,254
+MC-,MC,-,medium clay,clay,medium clay,medium clay,medium clay,1057,255
+MC,MC,NA,medium clay,clay,medium clay,medium clay,medium clay,71043,256
+MC+,MC,+,medium clay,clay,medium clay,medium clay,medium clay,5415,257
+MCI,MC,I,medium clay,clay,medium clay,medium clay,fibric medium clay,156,258
+ZMCA,ZMC,A,silty medium clay,clay,medium clay,"medium clay, silty","sapric medium clay, silty",6,259
+ZMC-,ZMC,-,silty medium clay,clay,medium clay,"medium clay, silty","medium clay, silty",4,260
+MCZ,MCZ,NA,medium clay; silty,clay,medium clay,"medium clay, silty","medium clay, silty",43,261
+ZMC,ZMC,NA,silty medium clay,clay,medium clay,"medium clay, silty","medium clay, silty",1668,262
+MCZ+,MCZ,+,medium clay; silty,clay,medium clay,"medium clay, silty","medium clay, silty",1,263
+ZMC+,ZMC,+,silty medium clay,clay,medium clay,"medium clay, silty","medium clay, silty",5,264
+ZMCI,ZMC,I,silty medium clay,clay,medium clay,"medium clay, silty","fibric medium clay, silty",177,265
+KSMHC-,KSMHC,-,coarse sandy medium heavy clay,clay,medium heavy clay,"medium heavy clay, sandy, coarse","medium heavy clay, sandy, coarse",2,266
+KSMHC,KSMHC,NA,coarse sandy medium heavy clay,clay,medium heavy clay,"medium heavy clay, sandy, coarse","medium heavy clay, sandy, coarse",220,267
+KSMHC+,KSMHC,+,coarse sandy medium heavy clay,clay,medium heavy clay,"medium heavy clay, sandy, coarse","medium heavy clay, sandy, coarse",8,268
+SMHC-,SMHC,-,sandy medium heavy clay,clay,medium heavy clay,"medium heavy clay, sandy, medium","medium heavy clay, sandy, medium",2,269
+MHCS,MHCS,NA,medium heavy clay; sandy,clay,medium heavy clay,"medium heavy clay, sandy, medium","medium heavy clay, sandy, medium",24,270
+SMHC,SMHC,NA,sandy medium heavy clay,clay,medium heavy clay,"medium heavy clay, sandy, medium","medium heavy clay, sandy, medium",712,271
+SMHC+,SMHC,+,sandy medium heavy clay,clay,medium heavy clay,"medium heavy clay, sandy, medium","medium heavy clay, sandy, medium",3,272
+FSMHC-,FSMHC,-,fine sandy medium heavy clay,clay,medium heavy clay,"medium heavy clay, sandy, fine","medium heavy clay, sandy, fine",2,273
+FSMHC,FSMHC,NA,fine sandy medium heavy clay,clay,medium heavy clay,"medium heavy clay, sandy, fine","medium heavy clay, sandy, fine",895,274
+MHCFS,MHCFS,NA,medium heavy clay; fine sandy,clay,medium heavy clay,"medium heavy clay, sandy, fine","medium heavy clay, sandy, fine",35,275
+FSMHC+,FSMHC,+,fine sandy medium heavy clay,clay,medium heavy clay,"medium heavy clay, sandy, fine","medium heavy clay, sandy, fine",14,276
+MHCA,MHC,A,medium heavy clay,clay,medium heavy clay,medium heavy clay,sapric medium heavy clay,9,277
+MHC-,MHC,-,medium heavy clay,clay,medium heavy clay,medium heavy clay,medium heavy clay,520,278
+MHC,MHC,NA,medium heavy clay,clay,medium heavy clay,medium heavy clay,medium heavy clay,39118,279
+MHC+,MHC,+,medium heavy clay,clay,medium heavy clay,medium heavy clay,medium heavy clay,471,280
+MHC1,MHC,1,medium heavy clay,clay,medium heavy clay,medium heavy clay,medium heavy clay,2,281
+MHCI,MHC,I,medium heavy clay,clay,medium heavy clay,medium heavy clay,fibric medium heavy clay,29,282
+ZMHC,ZMHC,NA,silty medium heavy clay,clay,medium heavy clay,"medium heavy clay, silty","medium heavy clay, silty",323,283
+ZMHCI,ZMHC,I,silty medium heavy clay,clay,medium heavy clay,"medium heavy clay, silty","fibric medium heavy clay, silty",2,284
+KSHC,KSHC,NA,coarse sandy heavy clay,clay,heavy clay,"heavy clay, sandy, coarse","heavy clay, sandy, coarse",42,285
+KSHC+,KSHC,+,coarse sandy heavy clay,clay,heavy clay,"heavy clay, sandy, coarse","heavy clay, sandy, coarse",1,286
+SHC-,SHC,-,sandy heavy clay,clay,heavy clay,"heavy clay, sandy, medium","heavy clay, sandy, medium",1,287
+SHC,SHC,NA,sandy heavy clay,clay,heavy clay,"heavy clay, sandy, medium","heavy clay, sandy, medium",184,288
+SHC+,SHC,+,sandy heavy clay,clay,heavy clay,"heavy clay, sandy, medium","heavy clay, sandy, medium",1,289
+FSHC-,FSHC,-,fine sandy heavy clay,clay,heavy clay,"heavy clay, sandy, fine","heavy clay, sandy, fine",2,290
+FSHC,FSHC,NA,fine sandy heavy clay,clay,heavy clay,"heavy clay, sandy, fine","heavy clay, sandy, fine",99,291
+FSHC+,FSHC,+,fine sandy heavy clay,clay,heavy clay,"heavy clay, sandy, fine","heavy clay, sandy, fine",1,292
+HCA,HC,A,heavy clay,clay,heavy clay,heavy clay,sapric heavy clay,1,293
+HC-,HC,-,heavy clay,clay,heavy clay,heavy clay,heavy clay,459,294
+HC,HC,NA,heavy clay,clay,heavy clay,heavy clay,heavy clay,17196,295
+HC+,HC,+,heavy clay,clay,heavy clay,heavy clay,heavy clay,33,296
+HCI,HC,I,heavy clay,clay,heavy clay,heavy clay,fibric heavy clay,17,297
+ZHC,ZHC,NA,silty heavy clay,clay,heavy clay,"heavy clay, silty","heavy clay, silty",80,298
+ZHCI,ZHC,I,silty heavy clay,clay,heavy clay,"heavy clay, silty","fibric heavy clay, silty",1,299
