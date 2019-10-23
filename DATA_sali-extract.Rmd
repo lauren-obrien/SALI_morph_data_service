@@ -1,0 +1,302 @@
+---
+title: "TERN - morphology data for SLGA II - Get Data"
+output: html_document
+author: "Lauren O'Brien"
+date: `r Sys.Date()`
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, results = 'hold', fig.height = 6,
+                      fig.align = 'center', warning = FALSE, message = FALSE,
+                      eval = FALSE)
+```
+
+```{r pkgs, results = 'hide'}
+options(stringsAsFactors = FALSE, scipen = 999)
+library(sf)            # vector data IO and processing
+library(DBI)           # database interface
+library(ROracle)       # Oracle database drivers
+library(getPass)       # password management
+library(units)         # for working with unit-attributed data
+library(tidyverse)     # general data manipulation and display
+
+Sys.setenv(
+  'TNS_ADMIN'   = file.path('C:', 'Users', Sys.getenv('USERNAME'), 'Oracle'),
+  'ORACLE_HOME' = 'C:/Program Files/Oracle Instant Client'
+  )
+SALI <- dbConnect(dbDriver('Oracle'),
+                  username = 'obrienle',
+                  password = getPass(),
+                  dbname   = 'sispda',
+                  host     = 'ex02client01',
+                  port     = 1521)
+
+if(!dir.exists(file.path(getwd(), 'SALI_DATA'))) {
+  dir.create(file.path(getwd(), 'SALI_DATA'))
+}
+
+```
+
+## Data snapshot
+
+Take a snapshot of relevant SALI tables to work with offline. Filter on data that's allowed out - from published projects where QC has been completed.
+
+Note: the SLGA data federator seems to want info from sit_site_man_pracs ("OBS_MNG_PRACS") but there's very little in there. Leaving it out unless requested.
+
+Note2: tablelevels seems to want only pH field data but other field tests are also useful so they're all getting extracted. 
+
+```{r getdat}
+today <- '20191023' # edit for fresh snapshot
+
+sit_datafile <- file.path(getwd(), 'SALI_DATA', 
+                          paste0('SALI_SIT-data_', today, '.rds'))
+
+temp1 <- "with temp1 as (
+             select project_code from reg_projects 
+             where site_qc_status = 'P'
+             and avail_status = 'E') "
+
+if(file.exists(sit_datafile)) {
+  sit_data <- readRDS(sit_datafile)
+} else {
+  sit_data <- 
+    list(
+      # LEVEL 1 - Sites
+      "SIT" = 
+        dbGetQuery(SALI,
+         paste0(temp1, 
+                "select * from temp1
+                 inner join sit_sites using (project_code)
+                 order by project_code, site_id")),
+      # LEVEL 2 - Observations
+      "OBS" = 
+        dbGetQuery(SALI,
+          paste0(temp1, 
+            "select * from temp1
+             inner join sit_observations using (project_code)
+             order by project_code, site_id, obs_no")),
+      # LEVEL 3 - within-observations
+      "CLA" = 
+        dbGetQuery(SALI,
+          paste0(temp1, 
+            "select * from temp1
+             inner join sit_soil_classifications using (project_code)
+             order by project_code, site_id, obs_no, soil_class_no")), 
+      "DIS" = 
+        dbGetQuery(SALI,
+          paste0(temp1, 
+                 "select * from temp1
+                  inner join sit_disturbances using (project_code)
+                  order by project_code, site_id, obs_no, disturb_no")),
+      "HOR" = 
+        dbGetQuery(SALI,
+          paste0(temp1, 
+            "select hor.*, (texture_code || texture_qualifier) as texture 
+             from temp1
+             inner join sit_horizons hor 
+               on temp1.project_code = hor.project_code
+             order by hor.project_code, site_id, obs_no, horizon_no")),
+      # grabbing all but SHAPE col below, ROracle can't handle SDO_GEOM :'(
+      "LOC" = 
+        dbGetQuery(SALI,
+          paste0(temp1, 
+            "select project_code, site_id, obs_no, datum, derived_location,
+             zone, easting, northing, longitude, latitude, loc_accuracy, 
+             created_by, creation_date, last_updated_by, last_update_date
+             from temp1
+             inner join sit_locations using (project_code)
+             where datum = 3
+             and longitude > 1
+             order by project_code, site_id, obs_no")),
+      "MIC" = 
+        dbGetQuery(SALI,
+          paste0(temp1,
+                 "select * from temp1
+                  inner join sit_microreliefs using (project_code)
+                  order by project_code, site_id, obs_no, micro_no")),
+      "OTC" = 
+        dbGetQuery(SALI,
+          paste0(temp1, 
+                 "select * from temp1
+                  inner join sit_rock_outcrops using (project_code)
+                  order by project_code, site_id, obs_no, outcrop_no")),
+      "SCF" =
+        dbGetQuery(SALI,
+          paste0(temp1,
+                 "select * from temp1
+                  inner join sit_surf_coarse_frags using (project_code)
+                  order by project_code, site_id, obs_no, surf_frag_no")),
+      "SCN" = 
+        dbGetQuery(SALI,
+          paste0(temp1,
+                 "select * from temp1
+                  inner join sit_surf_conditions using (project_code)
+                  order by project_code, site_id, obs_no, surf_cond_no")),
+      "VST" =
+        dbGetQuery(SALI,
+          paste0(temp1,
+                 "select * from temp1
+                  inner join sit_veg_strata using (project_code)
+                  order by project_code, site_id, obs_no, veg_comm_no")),
+      # LEVEL 4 - within-horizon, and within-veg-strata
+      "CFS" = 
+        dbGetQuery(SALI,
+         paste0(temp1, 
+                "select * from temp1
+                inner join sit_coarse_frags using (project_code)
+                order by project_code, site_id, obs_no, horizon_no,
+                  coarse_frag_no")),
+      "COL" = 
+        dbGetQuery(SALI,
+          paste0(temp1, 
+                 "select * from temp1
+                  inner join sit_horizon_colours using (project_code)
+                  order by project_code, site_id, obs_no, horizon_no, 
+                    hor_col_no")),
+      "CRK" = 
+        dbGetQuery(SALI,
+          paste0(temp1, 
+                 "select * from temp1
+                  inner join sit_cracks using (project_code)
+                  order by project_code, site_id, obs_no, horizon_no, 
+                    crack_no")),
+      "CUT" = 
+        dbGetQuery(SALI,
+          paste0(temp1, 
+                 "select * from temp1
+                  inner join sit_cutans using (project_code)
+                  order by project_code, site_id, obs_no, horizon_no, 
+                    cutan_no")),
+      "FAB" = 
+        dbGetQuery(SALI,
+          paste0(temp1, 
+                 "select * from temp1
+                  inner join sit_fabrics using (project_code)
+                  order by project_code, site_id, obs_no, horizon_no, 
+                    fab_no")),   
+      "MOT" = 
+        dbGetQuery(SALI,
+          paste0(temp1, 
+                 "select * from temp1
+                  inner join sit_mottles using (project_code)
+                  order by project_code, site_id, obs_no, horizon_no, 
+                    mott_no")),
+      "PAN" =
+        dbGetQuery(SALI,
+            paste0(temp1, 
+                   "select * from temp1
+                    inner join sit_pans using (project_code)
+                    order by project_code, site_id, obs_no, horizon_no, 
+                      pan_no")),
+      "POR" = 
+        dbGetQuery(SALI,
+            paste0(temp1, 
+                   "select * from temp1
+                    inner join sit_macropores using (project_code)
+                    order by project_code, site_id, obs_no, horizon_no, 
+                      macro_no")),     
+      "RTS" =
+        dbGetQuery(SALI,
+            paste0(temp1, 
+                   "select * from temp1
+                    inner join sit_roots using (project_code)
+                    order by project_code, site_id, obs_no, horizon_no, 
+                      root_no")),
+      "SEG" =
+        dbGetQuery(SALI,
+            paste0(temp1, 
+                   "select * from temp1
+                    inner join sit_segregations using (project_code)
+                    order by project_code, site_id, obs_no, horizon_no, 
+                      seg_no")),
+      "STG" =
+        dbGetQuery(SALI,
+            paste0(temp1, 
+                   "select * from temp1
+                    inner join sit_strengths using (project_code)
+                    order by project_code, site_id, obs_no, horizon_no, 
+                      stren_no")),
+      "STR" = 
+        dbGetQuery(SALI,
+            paste0(temp1, 
+                   "select * from temp1
+                    inner join sit_structures using (project_code)
+                    order by project_code, site_id, obs_no, horizon_no, 
+                      struct_no")),
+      "VSP" = 
+        dbGetQuery(SALI,
+            paste0(temp1, 
+                   "select * from temp1
+                    inner join sit_veg_strata_species using (project_code)
+                    order by project_code, site_id, obs_no, veg_comm_no, 
+                      veg_strata_spec_no")), 
+      # Field tests are pulled out by type here for simplicity: pH, EC, 
+      # dispersion, slaking, fine earth effervescence, pH of hydrogen peroxide
+      # extract (nb: acid sulfate specific)
+      "FT_PH" =
+        dbGetQuery(SALI,
+          paste0(temp1, 
+                 "select * from temp1
+                  inner join 
+                    (select * from sit_field_tests where test_type = 'PH') ftph
+                      using (project_code)
+                  order by project_code, site_id, obs_no, horizon_no, 
+                    test_no")),
+      "FT_EC" =
+        dbGetQuery(SALI,
+          paste0(temp1, 
+                 "select * from temp1
+                  inner join 
+                    (select * from sit_field_tests where test_type = 'EC') ftec
+                      using (project_code)
+                  order by project_code, site_id, obs_no, horizon_no, 
+                    test_no")), 
+      "FT_DS" =
+        dbGetQuery(SALI,
+          paste0(temp1, 
+                 "select * from temp1
+                  inner join 
+                    (select * from sit_field_tests where test_type = 'DISP') ftd
+                      using (project_code)
+                  order by project_code, site_id, obs_no, horizon_no, 
+                    test_no")), 
+      "FT_SL" = 
+        dbGetQuery(SALI,
+          paste0(temp1, 
+                 "select * from temp1
+                  inner join 
+                    (select * from sit_field_tests where test_type = 'SLAK') fts
+                      using (project_code)
+                  order by project_code, site_id, obs_no, horizon_no, 
+                    test_no")),   
+      "FT_H2" = 
+        dbGetQuery(SALI,
+          paste0(temp1, 
+                 "select * from temp1
+                  inner join 
+                    (select * from sit_field_tests where test_type = 'H2O2') fth
+                      using (project_code)
+                  order by project_code, site_id, obs_no, horizon_no, 
+                    test_no")), 
+      "FT_FZ" = 
+        dbGetQuery(SALI,
+          paste0(temp1, 
+                 "select * from temp1
+                  inner join 
+                    (select * from sit_field_tests where test_type = 'CAREF') fc
+                      using (project_code)
+                  order by project_code, site_id, obs_no, horizon_no, 
+                    test_no"))
+      )
+  saveRDS(sit_data, sit_datafile)
+}
+
+```
+
+Note: Not sure when/if decodes needed, table (hah!) for now.
+
+Note2: Might be worth dropping the created/updated fields to save space??? 'bout 440MB atm
+
+***
