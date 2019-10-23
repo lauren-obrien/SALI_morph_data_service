@@ -1,6 +1,8 @@
 ---
 title: "TERN - morphology data for SLGA II"
 output: html_document
+author: "Lauren O'Brien"
+date: `r Sys.Date()`
 editor_options: 
   chunk_output_type: console
 ---
@@ -509,7 +511,7 @@ d_sol <-
 
 #### Depth of observation
 
-This is just the max recorded horizon depth.
+This is just the maximum recorded horizon depth.
 
 ```{r doa}
 d_obs <- 
@@ -557,7 +559,7 @@ Texture codes are map back to a multidimensional space (at its simplest, a terna
 # the quantiles below are roughly equivalent to +/- 1SD if the data were normal
 # not all codes have associated data but this should help with ranking
 tex_ranks <- read_csv(file.path(getwd(), 'helpers',
-                                'SALI_TEXTURE_CODE_RANKING_DRAFT.csv'))
+                                'SALI_TEXTURES_RANKED_2.csv'))
 
 min_A_tex <- 
   dplyr::select(sit_data[['HOR']], PROJECT_CODE, SITE_ID, OBS_NO,
@@ -739,7 +741,7 @@ B1thenB2 <- B1_bnd %>%
                                 is.na(DESIGN_NUM_PREFIX) &
                                 is.na(DESIGN_SUBDIV) ~ TRUE, 
                               is.na(HORIZON_NAME) ~ NA,
-                               TRUE ~ FALSE))
+                               TRUE ~ FALSE)) %>% 
   dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, B1_OVER_B2) %>% 
   ungroup()
 
@@ -755,7 +757,8 @@ dat <- reduce(list(A_bnd, athenB, B1_bnd, B1thenB2), full_join) %>%
                             TRUE ~ NA))
                
 # next: get the texture codes either side of the divide, where SAC_AB = TRUE
-tc_last <- dat %>% 
+tc_rating <- dat %>%
+  dplyr::select(-TEXTURE) %>% 
   left_join(., 
             dplyr::select(sit_data[['HOR']], PROJECT_CODE, SITE_ID, OBS_NO, 
                           HORIZON_NO, TEXTURE),
@@ -771,13 +774,14 @@ tc_last <- dat %>%
                             TRUE ~ NA_real_)) %>% 
   left_join(., 
             dplyr::select(sit_data[['HOR']], PROJECT_CODE, SITE_ID, OBS_NO, 
-                          HORIZON_NO, TEXTURE_CODE, TEXTURE_QUALIFIER),
+                          HORIZON_NO, TEXTURE),
             by = c("PROJECT_CODE", "SITE_ID", "OBS_NO", "NEXT_B_NO" = "HORIZON_NO")) %>% 
-  rename(B2_TEX = TEXTURE) 
-
-# condense texture cols
-  
-  
+  rename(TEX_BELOW_BNDRY = TEXTURE) %>% 
+  # condense last A/B1
+  mutate(TEX_ABOVE_BNDRY = LAST_A_TEX,
+         TEX_ABOVE_BNDRY = ifelse(is.na(TEX_ABOVE_BNDRY) & !is.na(LAST_B1_TEX), 
+                                  LAST_B1_TEX, TEX_ABOVE_BNDRY))
+# now conv to rank, calc jump, rate
 
 
 
@@ -809,7 +813,7 @@ plot(layer_one_pts['GILGAI_PRESENCE'], pch = 20)
 
 Primary keys are `PROJECT_CODE`, `SITE_ID`, `OBS_NO`, `HORIZON_NO`.
 
-Data is filtered as for Layer 1
+Data is filtered as for Layer 1.
 
 ## Horizon level data
 
