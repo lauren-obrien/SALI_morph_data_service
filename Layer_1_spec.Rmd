@@ -175,7 +175,7 @@ if(file.exists(sit_datafile)) {
 Initial plans are to publish a two-layer web feature service with point geometry:
 
   * Layer 1: Observation-level data, plus profile summary information like depth to A
-  * Layer 2: Wide-formatted horizon data relevant to SLGA II modelling 
+  * Layer 2: Horizon-level data relevant to SLGA II modelling 
   
 Since the spec for SLGA II is not yet settled, the content of the layers is likely to change. The ASRIS tech specs v1.6 will also be used to guide the service structure, particularly Table 52 (Recommended Minimum Dataset for the ASRIS profile database).
 
@@ -209,7 +209,7 @@ l1s_datafile <- file.path(getwd(), 'SALI_DATA',
                           paste0('l1_simple_', today, '.rds'))
 
 if(file.exists(l1s_datafile)) {
-  sit_data <- readRDS(l1s_datafile)
+  l1_simple <- readRDS(l1s_datafile)
 } else {
   l1_simple <- 
     dbGetQuery(SALI, 
@@ -266,7 +266,7 @@ l1_dist <-
 
 #### Microrelief 
 
-The following simplifies the SALI records down to 'present'/'confirmed absent'/'not recorded', for 'landscape' microrelief only - that which is controlled by inherent soil and parent material properties. As such, the gilgai types are retained, along with karst country and mound/depression microrelief. Excluded are biotic microrelief (as its often ephemeral), limited-extent features like sinkholes and springs, and microrelief induced by loss of vegetation cover (e.g. terracettes and slumps).
+The following simplifies the SALI records down to 'present'/'confirmed absent'/'not recorded', for 'landscape' microrelief only - that which is controlled by inherent soil and parent material properties. As such, the gilgai types are retained, along with karst country and mound/depression microrelief. Excluded are biotic microrelief (as its often ephemeral/changeable), limited-extent features like sinkholes and springs, and microrelief induced by loss of vegetation cover (e.g. terracettes and slumps).
 
 ```{r l1_gilgai}
 L1_gilgai <-
@@ -288,53 +288,49 @@ L1_gilgai <-
 
 #### Surface coarse fragments
 
-Multiple records can be created for surface coarse fragments where e.g. poorly sorted lag gravels exist. Below, surface coarse fragment data is simplified to report total abundance as a percentage, and then both the maximum and most abundant size fractions observed. Lithology and shape are omitted for now as they may not be highly relevant to modelling e.g. surface water infiltration.
+Multiple records can be created for surface coarse fragments where e.g. poorly sorted lag gravels exist. Below, surface coarse fragment data is simplified to report total abundance, and then both the maximum and most abundant size fractions observed. Lithology and shape are omitted for now as they may not be highly relevant to modelling e.g. surface water infiltration.
 
 ```{r l1_scfs}
-# decode coarse frag abundance categories - see Yellow Book
+# decode coarse frag abundance categories to percentage ranges - see Yellow Book
 cf_abunds <- tribble(~ABUND, ~LO, ~MID, ~HI,
-                        '0',   0,    0,   0,
-                        '1', 0.1,  1.5,   2,
-                        '2',   2,    6,  10,
-                        '3',  10,   15,  20,
-                        '4',  20,   35,  50,
-                        '5',  50,   70,  90,
-                        '6',  90,   95, 100)
+                        0,   0,    0,   0,
+                        1, 0.1,  1.5,   2,
+                        2,   2,    6,  10,
+                        3,  10,   15,  20,
+                        4,  20,   35,  50,
+                        5,  50,   70,  90,
+                        6,  90,   95, 100)
 
-# function to get largest sum of abundances that doesn't exceed 100
-sum_abund <- function(x = NULL) {
-  # x is a vector of cats
-  lo   <- sum(cf_abunds$LO[cf_abunds$ABUND %in% x])
-  mid  <- sum(cf_abunds$MID[cf_abunds$ABUND %in% x]) 
-  hi   <- sum(cf_abunds$HI[cf_abunds$ABUND %in% x])
-  pick <- which(c(lo, mid, hi) < 100)
-  if(all(is.na(pick))) { return(100) } # all add up to > 100 e.g. 4, 6
-  c(lo, mid, hi)[max(pick)] # pick biggest below 100%
+tot_abund <- function(x = NULL) {
+  # x is a vector of categories
+  filt <- sapply(na.omit(x), function(y) which(cf_abunds$ABUND == y)) # loooool
+  if(length(filt) == 0) { return(NA_character_) }
+  poss <- cf_abunds[filt,  ]
+  opts <- c(sum(poss$LO), sum(poss$MID), sum(poss$HI))
+  check <- opts <= 100
+  if(all(check == FALSE)) { return('6') }
+  if(all(opts[check] == 0)) { return('0') }
+  catout <- which(cf_abunds$HI > max(opts[check == TRUE]))[1]
+  as.character(cf_abunds$ABUND[catout])
 }
 
 l1_scf <- 
   dplyr::select(sit_data[['SCF']],
                 PROJECT_CODE, SITE_ID, OBS_NO, SURF_FRAG_NO, ABUNDANCE, 
                 SURF_FRAG_SIZE) %>% 
-  dplyr::filter(!is.na)
   rename(SURF_FRAG_ABUND = ABUNDANCE) %>%
   # handle historical code '-'
   mutate_if(is.character, list(~na_if(., '-'))) %>% 
   group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>%
-  summarise(SURF_FRAG_TOTAL_ABUND_PC = sum_abund(SURF_FRAG_ABUND),
-            SURF_FRAG_MAX_SIZE = max(SURF_FRAG_SIZE),
-            SURF_FRAG_DOM_SIZE = {
-              if(all(is.na(SURF_FRAG_NO))) { 
-                NA 
-                } else {
-                  x <- SURF_FRAG_SIZE[which(SURF_FRAG_ABUND == max(SURF_FRAG_ABUND))]
-                 # for abundance ties, pick largest size
-                 if(length(x) > 1) { max(x) } else { x }
-                }
-            })
-# actually super not fond of back-converting this data
-# should be modelled as it was recorded - ordinal cats
-# TODO look into better ways to total the categorical abundance data
+  summarise(SURF_FRAG_TOTAL_ABUND = 
+              ifelse(n() == 1, SURF_FRAG_ABUND, tot_abund(SURF_FRAG_ABUND)),
+            SURF_FRAG_MAX_SIZE = 
+              ifelse(n() == 1, SURF_FRAG_SIZE, 
+                     as.character(max(SURF_FRAG_SIZE, na.rm = TRUE))),
+            SURF_FRAG_DOM_SIZE =
+              ifelse(n() == 1, SURF_FRAG_SIZE, 
+                     SURF_FRAG_SIZE[which(SURF_FRAG_ABUND == max(SURF_FRAG_ABUND))][1]))
+# TODO get a test suite going for this
 ```
 
 #### Rock Outcrop
@@ -344,33 +340,39 @@ Very few multiple outcrop records exist, but where they do, total abundance is r
 ```{r l1_outcrop}
 # decode coarse frag abundance categories
 oc_abunds <- tribble(~ABUND, ~LO, ~MID, ~HI,
-                        '0',   0,    0,   0,
-                        '1', 0.1,  1.5,   2,
-                        '2',   2,    6,  10,
-                        '3',  10,   15,  20,
-                        '4',  20,   35,  50,
-                        '5',  50,   75, 100)
+                        0,   0,    0,   0,
+                        1, 0.1,  1.5,   2,
+                        2,   2,    6,  10,
+                        3,  10,   15,  20,
+                        4,  20,   35,  50,
+                        5,  50,   75, 100)
 
-sum_oc_abund <- function(x = NULL) {
-  # x is a vector of cats
-  lo  <- sum(oc_abunds$LO[oc_abunds$ABUND %in% x])
-  mid <- sum(oc_abunds$MID[oc_abunds$ABUND %in% x]) 
-  hi  <- sum(oc_abunds$HI[oc_abunds$ABUND %in% x])
-  pick <- which(c(lo, mid, hi) < 100)
-  if(all(is.na(pick))) { return(100) } 
-  c(lo, mid, hi)[max(pick)] 
+tot_abund <- function(x = NULL) {
+  # x is a vector of categories
+  filt <- sapply(na.omit(x), function(y) which(oc_abunds$ABUND == y))
+  if(length(filt) == 0) { return(NA_character_) }
+  poss <- oc_abunds[filt,  ]
+  opts <- c(sum(poss$LO), sum(poss$MID), sum(poss$HI))
+  check <- opts <= 100
+  if(all(check == FALSE)) { return('5') }
+  if(all(opts[check] == 0)) { return('0') }
+  catout <- which(oc_abunds$HI > max(opts[check == TRUE]))[1]
+  as.character(oc_abunds$ABUND[catout])
 }
 
 l1_outcrop <- 
   dplyr::select(sit_data[['OTC']],
                 PROJECT_CODE, SITE_ID, OBS_NO, OUTCROP_NO, ABUNDANCE) %>% 
   rename(OUTCROP_ABUND = ABUNDANCE) %>% 
+  # handle historical code '-'
+  mutate_if(is.character, list(~na_if(., '-'))) %>%
   group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>%
-  summarise(OUTCROP_ABUND = sum_oc_abund(OUTCROP_ABUND))
+  summarise(OUTCROP_TOTAL_ABUND = 
+              ifelse(n() == 1, OUTCROP_ABUND, tot_abund(OUTCROP_ABUND)))
 
 ```
 
-NB: will later have to rescale surface coarse frag and outcrop abundance to add to total of 100%, where exceedences exist (they shouldn't).
+NB: check for any sites with both outcrop and SCF maxed out...
 
 ### Profile summary parameters
 
@@ -440,8 +442,8 @@ The ASRIS specs define impeding layers as a result of chemical toxicity, chemica
 
 Parameters examined are calculated depth to R horizon, depth to continuous cemented pan, and depth to permanent water table.
 
-Note: Depth to R horizon is sometimes also recorded at the observation level, but sigificant data quality problems mean that this field is currently unusable. Known issues:
-  * large number of values recorded in cm rather than m, inconsistently within and between projects
+Note: Depth to R horizon is sometimes also recorded at the observation level, but sigificant data quality problems in SALI mean that this field is currently unusable. Known issues:
+  * large number of values recorded in centimeters rather than meters, inconsistently within and between projects
   * obvious discrepancies between profile descriptions and stated depth to R. 
   * obvious nonsense values e.g. 999
 
