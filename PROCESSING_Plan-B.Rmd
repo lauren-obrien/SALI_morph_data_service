@@ -43,11 +43,11 @@ SALI <- dbConnect(dbDriver('Oracle'),
 Exploring an alternate option where the service structure follows the SALI SITE database structure more closely. Layer 1 will still have the calculated summaries seen in 'PROCESSING_Layer-1.Rmd', but some data like soil classification will be punted out to its own table.
 
 Pros: Less wasted space in tables, easier to metadata and visualise, more efficient downloading
-Cons: Some more complex queries might be punted client-side.  
+Cons: Some more complex queries might be forced client-side.  
 
 ## Structure
 
-  * Layer 1 - Sites summary data (to obs level plus calculated values)
+  * Layer 1 - Sites summary data (to observation level plus calculated values)
   * Layer 2 - Soil Classification (all data)
   * Layer 3 - Disturbance, Microrelief, Erosion and Surface Condition
   * Layer 4 - Surface Coarse Fragments and Rock Outcrop
@@ -65,7 +65,7 @@ Cons: Some more complex queries might be punted client-side.
 Load data snapshot from 'DATA_sali-extract.Rmd'.
 
 ```{r getdat}
-today <- '20191023' 
+today <- '20191024' 
 sit_datafile <- file.path(getwd(), 'SALI_DATA', 
                           paste0('SALI_SIT-data_', today, '.rds'))
 sit_data <- readRDS(sit_datafile)
@@ -98,9 +98,12 @@ sitobs_base <-
 
 ### Layer 2 - Classifications
 
-Ditching `TECH_REF_CODE` because the contents don't currently make any sense. Renaming some of the ASC fields for greater consistency and easier querying.
+Ditching `TECH_REF_CODE` because the contents don't currently make any sense. ASC level data is also slightly stuffed atm. Renaming some of the ASC fields for greater consistency and easier querying.
 
-```{R layer2}
+```{r layer2}
+loc <- sit_data[['LOC']] %>%  
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, LONGITUDE, LATITUDE)
+
 layer_2 <- sit_data[['CLA']] %>% 
   rename(ASC_SORD = SUBORD_ASC_CODE,
          ASC_GGRP = GREAT_GROUP_ASC_CODE,
@@ -112,9 +115,7 @@ layer_2 <- sit_data[['CLA']] %>%
                 ASC_CONFIDENCE, ASC_ORD, ASC_SORD, ASC_GGRP, ASC_SGRP,
                 ASC_FAM1, ASC_FAM2, ASC_FAM3, ASC_FAM4, ASC_FAM5, PPF,
                 GSG_1, GSG_2) %>% 
-  left_join(., 
-            dplyr::select(sit_data[['LOC']], PROJECT_CODE, SITE_ID, OBS_NO, 
-                          LONGITUDE, LATITUDE),
+  left_join(., loc,
             by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO')) %>%
   dplyr::arrange(PROJECT_CODE, SITE_ID, OBS_NO, SOIL_CLASS_NO) %>% 
   filter(!is.na(LONGITUDE)) %>% 
@@ -122,6 +123,98 @@ layer_2 <- sit_data[['CLA']] %>%
   
 # e.g. 
 plot(dplyr::filter(layer_2, PROJECT_CODE == 'BAB')['ASC_ORD'], pch = 20)
+
+```
+
+### Layer 3 - Disturbance, Microrelief, Erosion and Surface Condition
+
+These are all soil surface parameters where multiple entries are possible.
+
+Microrelief is massaged a bit here for clarity - the yellow book codes are poorly structured at V3
+
+```{r layer3}
+
+dis <- sit_data[['DIS']] %>% 
+  mutate(PARAM = 'DISTURBANCE') %>% 
+  rename(PARAM_NO = DISTURB_NO) %>% 
+  dplyr::select(-matches('CREAT'), -matches('UPDAT'))
+
+ero <- sit_data[['ERO']] %>% 
+  mutate(PARAM = 'EROSION') %>% 
+  rename(PARAM_NO        = ERO_NO,
+         ERO_GULLY_DEPTH = GULLY_DEPTH) %>% 
+  dplyr::select(-matches('CREAT'), -matches('UPDAT'))
+
+mic <- sit_data[['MIC']] %>% 
+  dplyr::select(-matches('CREAT'), -matches('UPDAT')) %>% 
+  mutate(PARAM = 'MICRORELIEF',
+         MICRO_GROUP = 
+           case_when(MICRO_TYPE == 'Z'                 ~ 'Z', # None
+                     MICRO_TYPE %in% 
+                       c('C', 'N', 'L', 'A', 'M', 'G') ~ 'G', # Gilgai
+                     MICRO_TYPE %in% c('D', 'W')       ~ 'H', # Hummocky
+                     MICRO_TYPE %in% 
+                       c('U', 'K', 'I', 'S', 'R', 'T',
+                         'P', 'H', 'O')                ~ 'O', # Other,
+                     MICRO_TYPE == 'B'                 ~ 'B', # Biotic
+                     TRUE ~ NA_character_),
+         # MICRO_TYPE usually '-' or 'Z' or 'O' which isn't useful
+         # also a fair few mistakes like 'N' with 'O'
+         MICRO_GROUP = ifelse(is.na(BIOTIC_AGENT), MICRO_GROUP, 'B')) %>%
+  rename(PARAM_NO         = MICRO_NO, 
+         MIC_PROP_GILGAI  = PROPORTION_GILGAI,
+         MIC_VI           = VERTICAL_INTERVAL,
+         MIC_HI           = HORIZ_INTERVAL) 
+
+scn <- sit_data[['SCN']] %>% 
+  mutate(PARAM = 'SURF_COND') %>% 
+  rename(PARAM_NO = SURF_COND_NO, SURF_COND_STATUS = STATUS) %>% 
+  dplyr::select(-matches('CREAT'), -matches('UPDAT'))
+
+layer_3 <- reduce(list(loc, dis, scn, mic, ero),
+                  function(x, y) {
+                    full_join(x, y, by = intersect(names(x), names(y)))
+                    }
+                  ) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, LONGITUDE, LATITUDE, 
+                PARAM, PARAM_NO, everything()) %>% 
+  filter(!is.na(LONGITUDE)) %>% 
+  st_as_sf(., coords = c('LONGITUDE', 'LATITUDE'), crs = 4283)
+                
+# e.g.
+plot(dplyr::filter(layer_3, PROJECT_CODE == 'BAB')['DISTURB_TYPE'], pch = 20)
+
+```
+
+### Layer 4 - Surface Coarse Fragments and Rock Outcrop
+
+NB review abundance column as the decoes aren't quite the same...
+
+```{r layer4}
+scf <- sit_data[['SCF']] %>% 
+  mutate(PARAM = 'SURF_FRAGS') %>% 
+  rename(PARAM_NO = SURF_FRAG_NO,
+         SURF_FRAG_SHAPE = SHAPE,
+         SURF_FRAG_STRENGTH = STRENGTH) %>% 
+  dplyr::select(-matches('CREAT'), -matches('UPDAT'))
+
+otc <- sit_data[['OTC']] %>% 
+  mutate(PARAM = 'OUTCROP') %>% 
+  rename(PARAM_NO = OUTCROP_NO) %>% 
+  dplyr::select(-matches('CREAT'), -matches('UPDAT'))
+
+layer_4 <- reduce(list(loc, scf, otc),
+                  function(x, y) {
+                    full_join(x, y, by = intersect(names(x), names(y)))
+                    }
+                  ) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, LONGITUDE, LATITUDE, 
+                PARAM, PARAM_NO, everything()) %>% 
+  filter(!is.na(LONGITUDE)) %>% 
+  st_as_sf(., coords = c('LONGITUDE', 'LATITUDE'), crs = 4283) 
+
+# e.g.
+plot(dplyr::filter(layer_4, PROJECT_CODE == 'BAB')['LITH_CODE'], pch = 20)
 
 ```
 
