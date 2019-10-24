@@ -309,6 +309,6 @@ if(file.exists(sit_datafile)) {
 
 Note: Not sure when/if decodes needed, table (hah!) for now.
 
-Note2: Might be worth dropping the created/updated fields to save space??? 'bout 440MB atm
+Note2: Might be worth dropping the created/updated fields to save space??? 'bout 450MB atm
 
 ***

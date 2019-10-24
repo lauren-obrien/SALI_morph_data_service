@@ -8,12 +8,6 @@ editor_options:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
-
-Experiments with extracting and formatting soils morphology data in a form useful for TERN SLGA II modelling. Outputs will be published as a Web Feature Service. Potential for further development into a regular soils data service.
-
-```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, results = 'hold', fig.height = 6,
                       fig.align = 'center', warning = FALSE, message = FALSE,
                       eval = FALSE)
@@ -40,7 +34,7 @@ SALI <- dbConnect(dbDriver('Oracle'),
                   port     = 1521)
 ```
 
-Exploring an alternate option where the service structure follows the SALI SITE database structure more closely. Layer 1 will still have the calculated summaries seen in 'PROCESSING_Layer-1.Rmd', but some data like soil classification will be punted out to its own table.
+Exploring an alternate option where the service structure follows the SALI SITE database structure a bit more closely. Layer 1 will still have the calculated summaries seen in 'PROCESSING_Layer-1.Rmd', but some data like soil classification will be punted out to its own table.
 
 Pros: Less wasted space in tables, easier to metadata and visualise, more efficient downloading
 Cons: Some more complex queries might be forced client-side.  
@@ -55,12 +49,11 @@ Cons: Some more complex queries might be forced client-side.
   * Layer 6 - Horizon colours
   * Layer 7 - Horizon mottles 
   * Layer 8 - Horizon structures
-  * Layer 9 - Horizon coarse fragments and segregations
-  * Layer 10 - Horizon pans, cutans, fabrics
+  * Layer 9 - Horizon coarse fragments, segregations and pans
+  * Layer 10 - Horizon cutans and fabrics
   * Layer 11 - Horizon cracks, macropores and roots
   * Layer 12 - Field tests
   * Layer 13 - Samples (maybe with cross link to soil chem API)
-  * Layer 12 - Vegetation descriptions
 
 Load data snapshot from 'DATA_sali-extract.Rmd'.
 
@@ -130,20 +123,21 @@ plot(dplyr::filter(layer_2, PROJECT_CODE == 'BAB')['ASC_ORD'], pch = 20)
 
 These are all soil surface parameters where multiple entries are possible.
 
-Microrelief is massaged a bit here for clarity - the yellow book codes are poorly structured at V3
+Microrelief is massaged a bit here for clarity - the yellow book codes are somewhat poorly structured.
 
 ```{r layer3}
-
 dis <- sit_data[['DIS']] %>% 
   mutate(PARAM = 'DISTURBANCE') %>% 
   rename(PARAM_NO = DISTURB_NO) %>% 
-  dplyr::select(-matches('CREAT'), -matches('UPDAT'))
+  dplyr::select(-matches('CREAT'), -matches('UPDAT')) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, PARAM, PARAM_NO, everything())
 
 ero <- sit_data[['ERO']] %>% 
   mutate(PARAM = 'EROSION') %>% 
   rename(PARAM_NO        = ERO_NO,
          ERO_GULLY_DEPTH = GULLY_DEPTH) %>% 
-  dplyr::select(-matches('CREAT'), -matches('UPDAT'))
+  dplyr::select(-matches('CREAT'), -matches('UPDAT')) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, PARAM, PARAM_NO, everything())
 
 mic <- sit_data[['MIC']] %>% 
   dplyr::select(-matches('CREAT'), -matches('UPDAT')) %>% 
@@ -164,20 +158,24 @@ mic <- sit_data[['MIC']] %>%
   rename(PARAM_NO         = MICRO_NO, 
          MIC_PROP_GILGAI  = PROPORTION_GILGAI,
          MIC_VI           = VERTICAL_INTERVAL,
-         MIC_HI           = HORIZ_INTERVAL) 
+         MIC_HI           = HORIZ_INTERVAL) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, PARAM, PARAM_NO, MICRO_GROUP,
+                MICRO_TYPE, BIOTIC_AGENT, BIOTIC_COMP, everything())
 
 scn <- sit_data[['SCN']] %>% 
   mutate(PARAM = 'SURF_COND') %>% 
   rename(PARAM_NO = SURF_COND_NO, SURF_COND_STATUS = STATUS) %>% 
-  dplyr::select(-matches('CREAT'), -matches('UPDAT'))
+  dplyr::select(-matches('CREAT'), -matches('UPDAT')) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, PARAM, PARAM_NO, everything())
 
-layer_3 <- reduce(list(loc, dis, scn, mic, ero),
+layer_3 <- reduce(list(dis, scn, mic, ero),
                   function(x, y) {
                     full_join(x, y, by = intersect(names(x), names(y)))
                     }
                   ) %>% 
-  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, LONGITUDE, LATITUDE, 
-                PARAM, PARAM_NO, everything()) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, PARAM, PARAM_NO, everything()) %>% 
+  left_join(., loc,
+            by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO')) %>%
   filter(!is.na(LONGITUDE)) %>% 
   st_as_sf(., coords = c('LONGITUDE', 'LATITUDE'), crs = 4283)
                 
@@ -191,31 +189,350 @@ plot(dplyr::filter(layer_3, PROJECT_CODE == 'BAB')['DISTURB_TYPE'], pch = 20)
 NB review abundance column as the decoes aren't quite the same...
 
 ```{r layer4}
+
 scf <- sit_data[['SCF']] %>% 
   mutate(PARAM = 'SURF_FRAGS') %>% 
-  rename(PARAM_NO = SURF_FRAG_NO,
-         SURF_FRAG_SHAPE = SHAPE,
-         SURF_FRAG_STRENGTH = STRENGTH) %>% 
-  dplyr::select(-matches('CREAT'), -matches('UPDAT'))
+  rename(PARAM_NO = SURF_FRAG_NO) %>% 
+  dplyr::select(-matches('CREAT'), -matches('UPDAT')) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, PARAM, PARAM_NO, everything())
 
 otc <- sit_data[['OTC']] %>% 
   mutate(PARAM = 'OUTCROP') %>% 
   rename(PARAM_NO = OUTCROP_NO) %>% 
-  dplyr::select(-matches('CREAT'), -matches('UPDAT'))
+  dplyr::select(-matches('CREAT'), -matches('UPDAT')) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, PARAM, PARAM_NO, everything())
 
-layer_4 <- reduce(list(loc, scf, otc),
+layer_4 <- reduce(list(scf, otc),
                   function(x, y) {
                     full_join(x, y, by = intersect(names(x), names(y)))
                     }
                   ) %>% 
-  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, LONGITUDE, LATITUDE, 
-                PARAM, PARAM_NO, everything()) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, PARAM, PARAM_NO,
+                ABUNDANCE, LITH_CODE, ALTERATION, 
+                everything()) %>% 
+  left_join(., loc,
+            by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO')) %>%
   filter(!is.na(LONGITUDE)) %>% 
   st_as_sf(., coords = c('LONGITUDE', 'LATITUDE'), crs = 4283) 
 
 # e.g.
 plot(dplyr::filter(layer_4, PROJECT_CODE == 'BAB')['LITH_CODE'], pch = 20)
+# that's actually quite interesting!
+```
+
+### Layer 5 - Horizon definitions
+
+NB Consider folding in a concat col of suffixes
+
+```{r layer5}
+
+layer_5 <- sit_data[['HOR']] %>% 
+  dplyr::select(-matches('CREAT'), -matches('UPDAT')) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO,
+                UPPER_DEPTH, LOWER_DEPTH, 
+                HORIZON_NAME, TEXTURE, PERMEABILITY, DRAINAGE, 
+                DESIGN_NUM_PREFIX, DESIGN_MASTER, DESIGN_SUBDIV,
+                everything()) %>% 
+  left_join(., loc, by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO')) %>% 
+  filter(!is.na(LONGITUDE)) %>% 
+  st_as_sf(., coords = c('LONGITUDE', 'LATITUDE'), crs = 4283) 
+
+# e.g.
+plot(dplyr::filter(layer_5, PROJECT_CODE == 'BAB' &
+                     HORIZON_NO == 1)['TEXTURE_CODE'], pch = 20)
 
 ```
 
+### Layer 6 - Horizon colours
 
+Adding in hex values and also splitting up munsell to HVC components. Note Japanese and Munsell systems match where the codes are the same, but some codes were not available in one book vs the other.
+
+```{r layer6}
+sit_colours <- dbGetQuery(SALI, 
+                          "select colour_book, colour_code, hue, value, chroma, 
+                           rgb_value as hex_value
+                           from sit_colours col
+                           join sit_colour_convert ccv 
+                           on ccv.sali_colour = col.colour_code")
+
+layer_6 <- sit_data[['COL']] %>% 
+  dplyr::select(-matches('CREAT'), -matches('UPDAT')) %>% 
+  left_join(., sit_colours, by = c('COLOUR_BOOK', 'COLOUR_CODE')) %>% 
+  left_join(., loc, by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO')) %>% 
+  filter(!is.na(LONGITUDE)) %>% 
+  st_as_sf(., coords = c('LONGITUDE', 'LATITUDE'), crs = 4283) 
+
+# e.g.
+plot(dplyr::filter(layer_6, PROJECT_CODE == 'BAB' &
+                     HORIZON_NO == 1 & HOR_COL_NO == 1)['HUE'], pch = 20)
+   
+```
+
+### Layer 7 - Horizon mottles 
+
+A minority of mottles are described with reference to Munsell codes so may as well supply a hex value here too. Nominating some fairly arbitrary hex values for Yellow Book mottle colours as:
+
+  * R Red    - 10R48  - #994730
+  * O Orange - 5YR78  - #E89E63
+  * B Brown  - 10YR46 - #805921
+  * Y Yellow - 5Y88   - #E1C85A
+  * G Grey   - 10YR61 - #9E9187
+  * D Dark   - 10YR31 - #4F453D
+  * L Gley   - 10GY51 - #737D73
+  * P Pale   - 10YR81 - #D1C7BD
+  
+This might help with e.g. code-generated soil profile diagrams, but users should be aware that the YB colours conceal a fair bit of variation, particularly the dark/brown/pale codes.
+
+```{r layer7}
+
+layer_7 <- sit_data[['MOT']] %>% 
+  dplyr::select(-matches('CREAT'), -matches('UPDAT')) %>% 
+  rename(MOTT_ABUND = ABUNDANCE,
+         MOTT_BOUND_DISTINCT = BOUND_DISTINCT) %>% 
+  left_join(., sit_colours, by = c('COLOUR_BOOK', 'COLOUR_CODE')) %>% 
+  mutate(HEX_VALUE = 
+           case_when(COLOUR_BOOK == 'Y' & COLOUR_CODE == 'R' ~ '994730',
+                     COLOUR_BOOK == 'Y' & COLOUR_CODE == 'O' ~ 'E89E63',
+                     COLOUR_BOOK == 'Y' & COLOUR_CODE == 'B' ~ '805921',
+                     COLOUR_BOOK == 'Y' & COLOUR_CODE == 'Y' ~ 'E1C85A',
+                     COLOUR_BOOK == 'Y' & COLOUR_CODE == 'G' ~ '9E9187',
+                     COLOUR_BOOK == 'Y' & COLOUR_CODE == 'D' ~ '4F453D',
+                     COLOUR_BOOK == 'Y' & COLOUR_CODE == 'L' ~ '737D73',
+                     COLOUR_BOOK == 'Y' & COLOUR_CODE == 'P' ~ 'D1C7BD',
+                     TRUE ~ HEX_VALUE)) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, MOTT_NO,
+                MOTT_TYPE, MOTT_ABUND, MOTT_SIZE, CONTRAST, COLOUR_CODE, 
+                MOISTURE_STAT, MOTT_BOUND_DISTINCT, everything()) %>% 
+  left_join(., loc, by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO')) %>% 
+  filter(!is.na(LONGITUDE)) %>% 
+  st_as_sf(., coords = c('LONGITUDE', 'LATITUDE'), crs = 4283) 
+ 
+
+```
+
+### Layer 8 - Horizon structures
+
+```{r layer8}
+
+layer_8 <- sit_data[['STR']] %>% 
+  dplyr::select(-matches('CREAT'), -matches('UPDAT')) %>% 
+  left_join(., loc, by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO')) %>% 
+  filter(!is.na(LONGITUDE)) %>% 
+  st_as_sf(., coords = c('LONGITUDE', 'LATITUDE'), crs = 4283) 
+
+
+# e.g.
+plot(dplyr::filter(layer_8, PROJECT_CODE == 'BAB' &
+                     HORIZON_NO == 1 & STRUCT_NO == 1)['PEDALITY_GRADE'], 
+     pch = 20)
+
+```
+
+### Layer 9 - Horizon coarse fragments, segregations and pans
+
+Lumping the lumps together >.>
+
+```{r layer9}
+
+hcf <- sit_data[['CFS']] %>% 
+  mutate(PARAM = 'COARSE_FRAGS') %>% 
+  rename(PARAM_NO = COARSE_FRAG_NO) %>% 
+  dplyr::select(-matches('CREAT'), -matches('UPDAT')) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, PARAM, PARAM_NO,
+                ABUNDANCE, COARSE_FRAG_SIZE, SHAPE, LITH_CODE, everything())
+
+seg <- sit_data[['SEG']] %>% 
+  mutate(PARAM = 'SEGREGATIONS') %>% 
+  rename(PARAM_NO = SEG_NO,
+         SEG_NATURE = NATURE) %>% 
+  dplyr::select(-matches('CREAT'), -matches('UPDAT')) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, PARAM, PARAM_NO,
+                everything())
+
+pan <- sit_data[['PAN']] %>% 
+  mutate(PARAM = 'PANS') %>% 
+  rename(PARAM_NO = PAN_NO,
+         PAN_CEMENT = CEMENTATION,
+         PAN_CONTIN = CONTINUITY,
+         PAN_STRUCTURE = STRUCTURE) %>% 
+  dplyr::select(-matches('CREAT'), -matches('UPDAT')) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, PARAM, PARAM_NO,
+                everything())
+
+layer_9 <- reduce(list(hcf, seg, pan),
+                  function(x, y) {
+                    full_join(x, y, by = intersect(names(x), names(y)))
+                    }
+                  ) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, PARAM, PARAM_NO,
+                ABUNDANCE, LITH_CODE, ALTERATION, 
+                everything()) %>%
+  left_join(., loc, by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO')) %>% 
+  filter(!is.na(LONGITUDE)) %>% 
+  st_as_sf(., coords = c('LONGITUDE', 'LATITUDE'), crs = 4283) 
+
+# e.g.
+plot(dplyr::filter(layer_9, PROJECT_CODE == 'BAB' &
+                     HORIZON_NO == 1 & PARAM_NO == 1)['ABUNDANCE'], 
+     pch = 20)
+
+```
+
+### Layer 10 - Horizon cutans and fabrics
+
+Ped-surface features
+
+```{r layer_10}
+
+cut <- sit_data[['CUT']] %>% 
+  mutate(PARAM = 'CUTANS') %>% 
+  rename(PARAM_NO = CUTAN_NO) %>% 
+  dplyr::select(-matches('CREAT'), -matches('UPDAT')) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, PARAM, PARAM_NO,
+                everything()) 
+
+fab <- sit_data[['FAB']] %>% 
+  mutate(PARAM = 'FABRICS') %>% 
+  rename(PARAM_NO = FAB_NO) %>% 
+  dplyr::select(-matches('CREAT'), -matches('UPDAT')) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, PARAM, PARAM_NO,
+                everything())
+
+layer_10 <- reduce(list(cut, fab),
+                  function(x, y) {
+                    full_join(x, y, by = intersect(names(x), names(y)))
+                    }
+                  ) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, PARAM, PARAM_NO,
+                everything()) %>%
+  left_join(., loc, by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO')) %>% 
+  filter(!is.na(LONGITUDE)) %>% 
+  st_as_sf(., coords = c('LONGITUDE', 'LATITUDE'), crs = 4283) 
+
+# e.g.
+plot(dplyr::filter(layer_10, PROJECT_CODE == 'BAB' &
+                     HORIZON_NO == 1 & PARAM_NO == 1)['CUTAN_TYPE'], 
+     pch = 20)
+
+```
+
+### Layer 11 - Horizon cracks, macropores and roots
+
+The first two are under 'Voids' in the YB. All three facilitate water entry into the soil.
+
+```{r layer11}
+
+crk <- sit_data[['CRK']] %>% 
+  mutate(PARAM = 'CRACKS') %>% 
+  rename(PARAM_NO = CRACK_NO,
+         CRACK_WIDTH = WIDTH) %>% 
+  dplyr::select(-matches('CREAT'), -matches('UPDAT')) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, PARAM, PARAM_NO,
+                everything())
+
+por <- sit_data[['POR']] %>% 
+  mutate(PARAM = 'MACROPORES') %>% 
+  rename(PARAM_NO = MACRO_NO,
+         PORE_DIAMETER = DIAMETER) %>% 
+  dplyr::select(-matches('CREAT'), -matches('UPDAT')) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, PARAM, PARAM_NO,
+                everything())
+
+rts <- sit_data[['RTS']] %>% 
+  mutate(PARAM = 'ROOTS') %>% 
+  rename(PARAM_NO = ROOT_NO) %>% 
+  dplyr::select(-matches('CREAT'), -matches('UPDAT')) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, PARAM, PARAM_NO,
+                everything())
+layer_11 <- reduce(list(crk, por, rts),
+                  function(x, y) {
+                    full_join(x, y, by = intersect(names(x), names(y)))
+                    }
+                  ) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, PARAM, PARAM_NO,
+                everything()) %>%
+  left_join(., loc, by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO')) %>% 
+  filter(!is.na(LONGITUDE)) %>% 
+  st_as_sf(., coords = c('LONGITUDE', 'LATITUDE'), crs = 4283) 
+
+```
+
+### Layer 12 -  Field Tests
+
+Maybe I should have just pulled them out as one table!
+
+```{r layer12}
+
+layer_12 <- do.call('rbind', list(sit_data[['FT_PH']], sit_data[['FT_EC']],
+                                  sit_data[['FT_DS']], sit_data[['FT_SL']],
+                                  sit_data[['FT_FZ']], sit_data[['FT_H2']])) %>% 
+  dplyr::select(-matches('CREAT'), -matches('UPDAT')) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, TEST_NO,
+                everything()) %>% 
+  dplyr::arrange(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, TEST_NO, DEPTH) %>%
+  left_join(., loc, by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO')) %>% 
+  filter(!is.na(LONGITUDE)) %>% 
+  st_as_sf(., coords = c('LONGITUDE', 'LATITUDE'), crs = 4283) 
+
+# e.g.
+sph <- dplyr::filter(layer_12, PROJECT_CODE == 'BAB' &
+                     HORIZON_NO == 4 & TEST_TYPE == 'PH') %>% 
+       mutate(VALUE = as.numeric(VALUE))
+plot(sph['VALUE'],  pch = 20)
+
+```
+
+### Layer 13 - Samples
+
+TODO List available analytes (in general terms e.g. 'has pH EC Cations' etc)
+
+Provide cross link to soil-chem API at sample level??? No webpage interface tho... would return JSON.
+
+```{r layer13}
+## mapped lab codes to general groups manually beforehand
+#grps <- readxl::read_xlsx(file.path(getwd(), 'helpers',
+#                                    'SALI_Lab_Method_Groupings.xlsx'),
+#                          sheet = 1)
+#
+#labstuff <- dbGetQuery(SALI,
+#                       "select distinct project_code, site_id, obs_no, 
+#                          sample_no, lab_meth_code 
+#                        from sit_lab_results 
+#                        order by project_code, site_id, obs_no, 
+#                          sample_no, lab_meth_code") %>% 
+#  left_join(., grps, by = 'LAB_METH_CODE') %>% 
+#  select(-LAB_METH_CODE) %>% 
+#  group_by(PROJECT_CODE, SITE_ID, OBS_NO, SAMPLE_NO) %>% 
+#  summarise(MEAS_TYPES = toString(sort(unique(MEASUREMENT_TYPE))),
+#            ANALYTICAL_GROUPS = toString(sort(unique(ANALYTICAL_GROUP))))
+# hmmm!
+
+# for now,  
+layer_13 <- sit_data[['SAM']] %>% 
+  dplyr::select(-matches('CREAT'), -matches('UPDAT'), -SUBMISS_NOTES) %>% 
+  left_join(., loc, by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO')) %>% 
+  filter(!is.na(LONGITUDE)) %>% 
+  st_as_sf(., coords = c('LONGITUDE', 'LATITUDE'), crs = 4283) 
+
+
+```
+
+## Assemble service
+
+Will be publishing via SIR so may as well write to FGDB as well as RDS
+
+```{r esritime}
+
+SERVICE_B <- list(layer_1, layer_2, layer_3, layer_4, layer_5, layer_6, layer_7, layer_8, layer_9, layer_10, layer_11, layer_12, layer_13)
+
+names(SERVICE_B) <- paste0("LAYER_", seq(13))
+
+saveRDS(SERVICE_B, file.path(getwd(), 'CLEAN_DATA', 'SERVICE_B.rds'))
+
+# NFI how I'm going to name these in line with the SIR convention - will probs
+# have to fall back on QLD_SOIL_SITES_SERVICE_LYR1_P etc blerg
+
+
+
+
+```
