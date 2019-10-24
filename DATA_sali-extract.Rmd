@@ -90,6 +90,12 @@ if(file.exists(sit_datafile)) {
                  "select * from temp1
                   inner join sit_disturbances using (project_code)
                   order by project_code, site_id, obs_no, disturb_no")),
+      "ERO" = 
+        dbGetQuery(SALI,
+          paste0(temp1, 
+                 "select * from temp1
+                  inner join sit_erosions using (project_code)
+                  order by project_code, site_id, obs_no, ero_no")),        
       "HOR" = 
         dbGetQuery(SALI,
           paste0(temp1, 

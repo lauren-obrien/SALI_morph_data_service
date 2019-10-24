@@ -1,5 +1,5 @@
 ---
-title: "TERN - morphology data for SLGA II"
+title: "TERN - morphology data for SLGA II - Layer 1"
 output: html_document
 author: "Lauren O'Brien"
 date: `r Sys.Date()`
@@ -21,10 +21,10 @@ knitr::opts_chunk$set(echo = FALSE, results = 'hold', fig.height = 6,
 
 ```{r pkgs, results = 'hide'}
 options(stringsAsFactors = FALSE, scipen = 999)
-library(sf)            # vector data IO and processing
 library(DBI)           # database interface
 library(ROracle)       # Oracle database drivers
 library(getPass)       # password management
+library(sf)            # vector data IO and processing
 library(units)         # for working with unit-attributed data
 library(tidyverse)     # general data manipulation and display
 
@@ -38,138 +38,15 @@ SALI <- dbConnect(dbDriver('Oracle'),
                   dbname   = 'sispda',
                   host     = 'ex02client01',
                   port     = 1521)
-
-if(!dir.exists(file.path(getwd(), 'SALI_DATA'))) {
-  dir.create(file.path(getwd(), 'SALI_DATA'))
-}
-
 ```
 
-## Data snapshot
-
-Take a snapshot of relevant SALI tables to work with offline:
+Load data snapshot from 'DATA_sali-extract.Rmd'.
 
 ```{r getdat}
-today <- '20191018' # edit for fresh snapshot
-
+today <- '20191023' 
 sit_datafile <- file.path(getwd(), 'SALI_DATA', 
                           paste0('SALI_SIT-data_', today, '.rds'))
-
-if(file.exists(sit_datafile)) {
-  sit_data <- readRDS(sit_datafile)
-} else {
-  sit_data <- 
-    list(
-      "SIT" = 
-        dbGetQuery(SALI,
-            "with temp1 as (
-              select project_code from reg_projects 
-              where site_qc_status = 'P'
-              and avail_status = 'E'
-              )
-             select * from temp1
-             inner join sit_sites using (project_code)
-             order by project_code, site_id"),
-      "OBS" = 
-        dbGetQuery(SALI,
-            "with temp1 as (
-              select project_code from reg_projects 
-              where site_qc_status = 'P'
-              and avail_status = 'E'
-              )
-             select * from temp1
-             inner join sit_observations using (project_code)
-             order by project_code, site_id, obs_no"),
-      "LOC" = # grabbing all but SHAPE col, ROracle can't handle SDO_GEOM :(
-        dbGetQuery(SALI,
-            "with temp1 as (
-              select project_code from reg_projects 
-              where site_qc_status = 'P'
-              and avail_status = 'E'
-              )
-             select project_code, site_id, obs_no, datum, derived_location,
-             zone, easting, northing, longitude, latitude, loc_accuracy, 
-             created_by, creation_date, last_updated_by, last_update_date
-             from temp1
-             inner join sit_locations using (project_code)
-             where datum = 3
-             and longitude > 1
-             order by project_code, site_id, obs_no"),
-      "CLA" = 
-        dbGetQuery(SALI,
-            "with temp1 as (
-              select project_code from reg_projects 
-              where site_qc_status = 'P'
-              and avail_status = 'E'
-              )
-             select * from temp1
-             inner join sit_soil_classifications using (project_code)
-             order by project_code, site_id, obs_no, soil_class_no"), 
-      "DIS" = 
-        dbGetQuery(SALI,
-            "with temp1 as (
-              select project_code from reg_projects 
-              where site_qc_status = 'P'
-              and avail_status = 'E'
-              )
-             select * from temp1
-             inner join sit_disturbances using (project_code)
-             order by project_code, site_id, obs_no, disturb_no"),
-      "MIC" = 
-        dbGetQuery(SALI,
-            "with temp1 as (
-              select project_code from reg_projects 
-              where site_qc_status = 'P'
-              and avail_status = 'E'
-              )
-             select * from temp1
-             inner join sit_microreliefs using (project_code)
-             order by project_code, site_id, obs_no, micro_no"),
-      "SCF" =
-        dbGetQuery(SALI,
-            "with temp1 as (
-              select project_code from reg_projects 
-              where site_qc_status = 'P'
-              and avail_status = 'E'
-              )
-             select * from temp1
-             inner join sit_surf_coarse_frags using (project_code)
-             order by project_code, site_id, obs_no, surf_frag_no"),
-      "OTC" = 
-        dbGetQuery(SALI,
-            "with temp1 as (
-              select project_code from reg_projects 
-              where site_qc_status = 'P'
-              and avail_status = 'E'
-              )
-             select * from temp1
-             inner join sit_rock_outcrops using (project_code)
-             order by project_code, site_id, obs_no, outcrop_no"),
-      "HOR" = 
-        dbGetQuery(SALI,
-            "with temp1 as (
-              select project_code from reg_projects 
-              where site_qc_status = 'P'
-              and avail_status = 'E'
-              )
-             select hor.*, (texture_code || texture_qualifier) as texture from temp1
-             inner join sit_horizons hor on temp1.project_code = hor.project_code
-             order by hor.project_code, site_id, obs_no, horizon_no"),
-      "PAN" =
-        dbGetQuery(SALI,
-            "with temp1 as (
-              select project_code from reg_projects 
-              where site_qc_status = 'P'
-              and avail_status = 'E'
-              )
-             select * from temp1
-             inner join sit_pans using (project_code)
-             order by project_code, site_id, obs_no, horizon_no, pan_no")
-      # add more horizon-level stuff later
-    )
-  saveRDS(sit_data, sit_datafile)
-}
-
+sit_data <- readRDS(sit_datafile)
 ```
 
 ## Service structure
@@ -189,7 +66,7 @@ Data is filtered to projects where `REG_PROJECTS.AVAIL_STATUS = 'E'` and `REG_PR
 
 ### Simple parameters 
 
-Simple parameters are those where only one record per site or per observation exists, so they're easy to query out in one go:
+Simple parameters are those where only one record per site or per observation exists, so they're easier just to query out in one go:
 
   * Observation date
   * Site and obs type, obs reason
@@ -246,7 +123,7 @@ if(file.exists(l1s_datafile)) {
  
 ### Abbreviated parameters 
   
-Some site and observation-level parameters can have multiple records, but in this context they can be reported in a simplified format. These are
+Some site and observation-level parameters can have multiple records, but for Layer 1 they can be reported in a simplified format. These are
 
   * Site disturbance (report 'worst')
   * Microrelief (report presence/absence)
@@ -263,7 +140,6 @@ l1_dist <-
                 PROJECT_CODE, SITE_ID, OBS_NO, DISTURB_NO, DISTURB_TYPE) %>% 
   group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>%
   summarise(DISTURBANCE = as.character(max(as.integer(DISTURB_TYPE))))
-
 ```
 
 #### Microrelief 
@@ -667,6 +543,7 @@ It may be useful, then, to define a combined scale of texture contrast behaviour
   * 2 - moderate texture jump - 5-8 ranks eg. S over CLS, SL over CL, L over LC
   * 3 - maximal texture jump - more than 8 ranks e.g. S over CL, SL over LMC
 
+By the above, rank 3's should usually key out as SO/CH/KU in the ASC, and many of the rank 2's probably should as well. 
 Not sure whether to bring in further horizon nomenclature, B2 structure or bleach presence. They can co-occur - more pronounced TC soils often have bleached A2s, for example - but might just be confusing the issue. 
 
 ```{r duplexiness}

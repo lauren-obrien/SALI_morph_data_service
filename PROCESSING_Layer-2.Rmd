@@ -1,0 +1,197 @@
+---
+title: "TERN - morphology data for SLGA II - Layer 2"
+output: html_document
+author: "Lauren O'Brien"
+date: `r Sys.Date()`
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Experiments with extracting and formatting soils morphology data in a form useful for TERN SLGA II modelling. Outputs will be published as a Web Feature Service. Potential for further development into a regular soils data service.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, results = 'hold', fig.height = 6,
+                      fig.align = 'center', warning = FALSE, message = FALSE,
+                      eval = FALSE)
+```
+
+```{r pkgs, results = 'hide'}
+options(stringsAsFactors = FALSE, scipen = 999)
+library(sf)            # vector data IO and processing
+library(DBI)           # database interface
+library(ROracle)       # Oracle database drivers
+library(getPass)       # password management
+library(units)         # for working with unit-attributed data
+library(tidyverse)     # general data manipulation and display
+
+```
+
+Load data snapshot from 'Layer-1-spec.rmd'
+
+```{r datammmmm}
+today <- '20191018' 
+sit_datafile <- file.path(getwd(), 'SALI_DATA', 
+                          paste0('SALI_SIT-data_', today, '.rds'))
+
+sit_data <- readRDS(sit_datafile)
+```
+
+## Layer 2
+
+Layer 2 combines all the horizon-level parameters into a flat table suitable for API queries
+
+Primary keys are `PROJECT_CODE`, `SITE_ID`, `OBS_NO`, `HORIZON_NO`.
+
+Data is filtered to projects where `REG_PROJECTS.AVAIL_STATUS = 'E'` and `REG_PROJECTS.SITE_QC_STATUS = 'P'`. It may also be necessary to filter on `REG_PROJECTS.PROJ_QC_STATUS = 'P'` for consistency with existing services and APIs, although it should be noted that none of the fields checked by the project-level QC procedure are relevant to this service.
+
+### Horizon characterisation
+
+The first set of parameters only have one value per horizon, like its name and texture.
+
+```{r l21}
+
+
+
+```
+
+
+### And the rest
+
+All the other parameters can have multiple entries, e.g. a wet and dry colour, or multiple nested structures. These need to be given a domain attribute and their numbering needs to be consistent before joining.
+
+Note that some common parameters like `ABUNDANCE` don't have a common decode across parameter domains (I know, right? We'll figure it out later).
+
+```{r h2argh}
+hor_tidy <- sit_data[['HOR']] %>% 
+  rename(HOR_BOUND_DISTINCT = BOUND_DISTINCT) %>%  # augh
+  dplyr::select(-matches('CREAT'), -matches('UPDAT'))
+
+loc_tidy <- sit_data[['LOC']] %>% 
+  dplyr::select(-matches('CREAT'), -matches('UPDAT'), 
+                # stick with lat long
+                -ZONE, -EASTING, -NORTHING)
+
+coarse_frags <- sit_data[['CFS']] %>% 
+  mutate(PARAM = 'COARSE_FRAGS') %>% 
+  rename(PARAM_NO = COARSE_FRAG_NO) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, PARAM, PARAM_NO, 
+                everything()) %>% 
+  dplyr::select(-matches('CREAT'), -matches('UPDAT'))
+
+colours <- sit_data[['COL']] %>% 
+  mutate(PARAM = 'COLOURS') %>% 
+  rename(PARAM_NO = HOR_COL_NO, COLOUR_MOISTURE_STAT = MOISTURE_STAT) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, PARAM, PARAM_NO, 
+                everything()) %>% 
+  dplyr::select(-matches('CREAT'), -matches('UPDAT'))
+
+cracks <- sit_data[['CRK']] %>% 
+  mutate(PARAM = 'CRACKS') %>% 
+  rename(PARAM_NO = CRACK_NO) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, PARAM, PARAM_NO, 
+                everything()) %>% 
+  dplyr::select(-matches('CREAT'), -matches('UPDAT'))
+
+cutans <-  sit_data[['CUT']] %>% 
+  mutate(PARAM = 'CUTANS') %>% 
+  rename(PARAM_NO = CUTAN_NO) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, PARAM, PARAM_NO, 
+                everything()) %>% 
+  dplyr::select(-matches('CREAT'), -matches('UPDAT'))
+
+fabrics <-  sit_data[['FAB']] %>% 
+  mutate(PARAM = 'FABRICS') %>% 
+  rename(PARAM_NO = FAB_NO) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, PARAM, PARAM_NO, 
+                everything()) %>% 
+  dplyr::select(-matches('CREAT'), -matches('UPDAT'))
+
+mottles <- sit_data[['MOT']] %>% 
+  mutate(PARAM = 'MOTTLES') %>% 
+  rename(PARAM_NO = MOTT_NO, MOTT_BOUND_DISTINCT = BOUND_DISTINCT) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, PARAM, PARAM_NO, 
+                everything()) %>% 
+  dplyr::select(-matches('CREAT'), -matches('UPDAT'))
+
+pans <- sit_data[['PAN']] %>% 
+  mutate(PARAM = 'PANS') %>% 
+  rename(PARAM_NO = PAN_NO) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, PARAM, PARAM_NO, 
+                everything()) %>% 
+  dplyr::select(-matches('CREAT'), -matches('UPDAT'))
+
+pores <- sit_data[['POR']] %>% 
+  mutate(PARAM = 'PORES') %>% 
+  rename(PARAM_NO = MACRO_NO) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, PARAM, PARAM_NO, 
+                everything()) %>% 
+  dplyr::select(-matches('CREAT'), -matches('UPDAT'))
+
+roots <- sit_data[['RTS']] %>% 
+  mutate(PARAM = 'ROOTS') %>% 
+  rename(PARAM_NO = ROOT_NO) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, PARAM, PARAM_NO, 
+                everything()) %>% 
+  dplyr::select(-matches('CREAT'), -matches('UPDAT'))
+
+segregations <- sit_data[['SEG']] %>% 
+  mutate(PARAM = 'SEGREGATIONS') %>% 
+  rename(PARAM_NO = SEG_NO) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, PARAM, PARAM_NO, 
+                everything()) %>% 
+  dplyr::select(-matches('CREAT'), -matches('UPDAT'))
+
+strengths <- sit_data[['STG']] %>% 
+  mutate(PARAM = 'STRENGTHS') %>% 
+  rename(PARAM_NO = STREN_NO, STRENGTH_CLASS = CLASS) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, PARAM, PARAM_NO, 
+                everything()) %>% 
+  dplyr::select(-matches('CREAT'), -matches('UPDAT'))
+
+structures <- sit_data[['STR']] %>% 
+  mutate(PARAM = 'STRUCTURES') %>% 
+  rename(PARAM_NO = STRUCT_NO) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, PARAM, PARAM_NO, 
+                everything()) %>% 
+  dplyr::select(-matches('CREAT'), -matches('UPDAT'))
+
+veg_spp <- sit_data[['VSP']] %>% 
+  mutate(PARAM = 'VEG_SPECIES') %>% 
+  rename(PARAM_NO = VEG_STRATA_SPEC_NO) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, VEG_COMM_NO, 
+                VEG_STRATA_CODE, PARAM, PARAM_NO, 
+                everything()) %>% 
+  dplyr::select(-matches('CREAT'), -matches('UPDAT'))
+
+hor_params <- reduce(list(coarse_frags, colours, cracks, cutans, 
+              fabrics, mottles, pans, pores, roots, segregations, strengths, 
+              structures, veg_spp),
+          function(x, y) {
+                   full_join(x, y, by = intersect(names(x), names(y)))
+                   }
+                 )
+
+layer_2 <- left_join(hor_tidy, loc_tidy,
+                     by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO')) %>%
+  left_join(., hor_params, by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO', 'HORIZON_NO'))
+```
+
+
+Quick test on a site
+
+```{r filtest}
+
+dplyr::filter(layer_2, 
+              PROJECT_CODE == 'BAB' & 
+              SITE_ID == 100 & 
+              OBS_NO == 1 ) %>%
+  dplyr::select_if(~!all(is.na(.)))
+
+```
+
+Some select renaming helps with traceability IMO
+ 
