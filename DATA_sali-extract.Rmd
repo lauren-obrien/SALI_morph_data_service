@@ -48,15 +48,15 @@ Note: the SLGA data federator seems to want info from sit_site_man_pracs ("OBS_M
 Note2: tablelevels seems to want only pH field data but other field tests are also useful so they're all getting extracted. 
 
 ```{r getdat}
-today <- '20191023' # edit for fresh snapshot
+today <- '20191024' # edit for fresh snapshot
 
 sit_datafile <- file.path(getwd(), 'SALI_DATA', 
                           paste0('SALI_SIT-data_', today, '.rds'))
 
-temp1 <- "with temp1 as (
+temp1 <- c("with temp1 as (
              select project_code from reg_projects 
              where site_qc_status = 'P'
-             and avail_status = 'E') "
+             and avail_status = 'E') ")
 
 if(file.exists(sit_datafile)) {
   sit_data <- readRDS(sit_datafile)
