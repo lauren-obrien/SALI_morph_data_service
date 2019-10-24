@@ -1,0 +1,128 @@
+---
+title: "TERN - morphology data for SLGA II - PLAN B"
+output: html_document
+author: "Lauren O'Brien"
+date: `r Sys.Date()`
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Experiments with extracting and formatting soils morphology data in a form useful for TERN SLGA II modelling. Outputs will be published as a Web Feature Service. Potential for further development into a regular soils data service.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, results = 'hold', fig.height = 6,
+                      fig.align = 'center', warning = FALSE, message = FALSE,
+                      eval = FALSE)
+```
+
+```{r pkgs, results = 'hide'}
+options(stringsAsFactors = FALSE, scipen = 999)
+library(sf)            # vector data IO and processing
+library(DBI)           # database interface
+library(ROracle)       # Oracle database drivers
+library(getPass)       # password management
+library(units)         # for working with unit-attributed data
+library(tidyverse)     # general data manipulation and display
+
+Sys.setenv(
+  'TNS_ADMIN'   = file.path('C:', 'Users', Sys.getenv('USERNAME'), 'Oracle'),
+  'ORACLE_HOME' = 'C:/Program Files/Oracle Instant Client'
+  )
+SALI <- dbConnect(dbDriver('Oracle'),
+                  username = 'obrienle',
+                  password = getPass(),
+                  dbname   = 'sispda',
+                  host     = 'ex02client01',
+                  port     = 1521)
+```
+
+Exploring an alternate option where the service structure follows the SALI SITE database structure more closely. Layer 1 will still have the calculated summaries seen in 'PROCESSING_Layer-1.Rmd', but some data like soil classification will be punted out to its own table.
+
+Pros: Less wasted space in tables, easier to metadata and visualise, more efficient downloading
+Cons: Some more complex queries might be punted client-side.  
+
+## Structure
+
+  * Layer 1 - Sites summary data (to obs level plus calculated values)
+  * Layer 2 - Soil Classification (all data)
+  * Layer 3 - Disturbance, Microrelief, Erosion and Surface Condition
+  * Layer 4 - Surface Coarse Fragments and Rock Outcrop
+  * Layer 5 - Horizon definitions (name, thickness, colour, texture etc plus some summaries tba)
+  * Layer 6 - Horizon colours
+  * Layer 7 - Horizon mottles 
+  * Layer 8 - Horizon structures
+  * Layer 9 - Horizon coarse fragments and segregations
+  * Layer 10 - Horizon pans, cutans, fabrics
+  * Layer 11 - Horizon cracks, macropores and roots
+  * Layer 12 - Field tests
+  * Layer 13 - Samples (maybe with cross link to soil chem API)
+  * Layer 12 - Vegetation descriptions
+
+Load data snapshot from 'DATA_sali-extract.Rmd'.
+
+```{r getdat}
+today <- '20191023' 
+sit_datafile <- file.path(getwd(), 'SALI_DATA', 
+                          paste0('SALI_SIT-data_', today, '.rds'))
+sit_data <- readRDS(sit_datafile)
+```
+
+### Layer 1
+
+```{r layer1}
+sitobs_base <- 
+    dbGetQuery(SALI, 
+               "select project_code, site_id, obs_no,
+                 obs_date, site_type, obs_type,
+                 longitude, latitude, loc_accuracy, loc_meas_method,
+                 runoff, permeability, drainage, lith_code, land_use_code,
+                 slope_eval_method, slope_pct, slope_class, slope_morph_type, 
+                 elem_inc_slope, elem_type_code,
+                 modal_slope, relief_class, rel_mod_slope_class, patt_type_code
+               from reg_projects
+               join sit_sites using (project_code)
+               join sit_observations using (project_code, site_id)
+               join sit_locations using (project_code, site_id, obs_no)
+               where avail_status = 'E'
+               and site_qc_status = 'P'
+               and datum = 3
+               order by project_code, site_id, obs_no") %>% 
+    dplyr::filter(LONGITUDE > 1) # >:-(
+
+ # add in summary stuff from L1
+```
+
+### Layer 2 - Classifications
+
+Ditching `TECH_REF_CODE` because the contents don't currently make any sense. Renaming some of the ASC fields for greater consistency and easier querying.
+
+```{R layer2}
+layer_2 <- sit_data[['CLA']] %>% 
+  rename(ASC_SORD = SUBORD_ASC_CODE,
+         ASC_GGRP = GREAT_GROUP_ASC_CODE,
+         ASC_SGRP = SUBGROUP_ASC_CODE,
+         GSG_1    = EXHIBIT_GSG_CODE,
+         GSG_2    = AFFINITY_GSG_CODE
+         ) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, SOIL_CLASS_NO, BURIED_FLAG,
+                ASC_CONFIDENCE, ASC_ORD, ASC_SORD, ASC_GGRP, ASC_SGRP,
+                ASC_FAM1, ASC_FAM2, ASC_FAM3, ASC_FAM4, ASC_FAM5, PPF,
+                GSG_1, GSG_2) %>% 
+  left_join(., 
+            dplyr::select(sit_data[['LOC']], PROJECT_CODE, SITE_ID, OBS_NO, 
+                          LONGITUDE, LATITUDE),
+            by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO')) %>%
+  dplyr::arrange(PROJECT_CODE, SITE_ID, OBS_NO, SOIL_CLASS_NO) %>% 
+  filter(!is.na(LONGITUDE)) %>% 
+  st_as_sf(., coords = c('LONGITUDE', 'LATITUDE'), crs = 4283)
+  
+# e.g. 
+plot(dplyr::filter(layer_2, PROJECT_CODE == 'BAB')['ASC_ORD'], pch = 20)
+
+```
+
+
