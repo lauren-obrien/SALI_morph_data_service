@@ -48,7 +48,7 @@ Note: the SLGA data federator seems to want info from sit_site_man_pracs ("OBS_M
 Note2: tablelevels seems to want only pH field data but other field tests are also useful so they're all getting extracted. 
 
 ```{r getdat}
-today <- '20191024' # edit for fresh snapshot
+today <- '20191025' # edit for fresh snapshot
 
 sit_datafile <- file.path(getwd(), 'SALI_DATA', 
                           paste0('SALI_SIT-data_', today, '.rds'))
@@ -188,6 +188,12 @@ if(file.exists(sit_datafile)) {
                   inner join sit_fabrics using (project_code)
                   order by project_code, site_id, obs_no, horizon_no, 
                     fab_no")),   
+      "HSF" = 
+        dbGetQuery(SALI,
+          paste0(temp1, 
+                 "select * from temp1
+                  inner join sit_horizon_suffices using (project_code)
+                  order by project_code, site_id, obs_no, horizon_no")),         
       "MOT" = 
         dbGetQuery(SALI,
           paste0(temp1, 
@@ -312,3 +318,47 @@ Note: Not sure when/if decodes needed, table (hah!) for now.
 Note2: Might be worth dropping the created/updated fields to save space??? 'bout 450MB atm
 
 ***
+
+Get decodes into another list
+
+```{r getdecodes}
+decode_datafile <- file.path(getwd(), 'SALI_DATA', 
+                             paste0('SALI_SIT-data_decodes_', today, '.rds'))
+
+temp1 <- c("with temp1 as (
+             select project_code from reg_projects 
+             where site_qc_status = 'P'
+             and avail_status = 'E') ")
+
+# sali ref codes then dedicated tables
+
+if(file.exists(decode_datafile)) {
+  decodes <- readRDS(decode_datafile)
+} else {
+  decodes <- 
+    list(
+      # SALI ref codes holds all the short lists 
+      "SRC" = 
+        # not all of these domains are relevant but overkill to filter
+        dbGetQuery(SALI,
+                   "select * from sali_ref_codes
+                    order by rv_domain, rv_low_value"
+        ) ,
+      "ELE" = dbGetQuery(SALI, "select * from sit_elem_types"),
+      "ERD" = dbGetQuery(SALI, "select * from sit_erosion_degrees"),
+      "ERT" = dbGetQuery(SALI, "select * from sit_erosion_types"),
+      "FTT" = dbGetQuery(SALI, "select * from sit_field_test_types"),
+      "GSG" = dbGetQuery(SALI, "select * from sit_gsgs"),
+      "LUS" = dbGetQuery(SALI, "select * from sit_land_uses"),
+      "LTH" = dbGetQuery(SALI, "select * from sit_lithologies"), 
+      "PAT" = dbGetQuery(SALI, "select * from sit_patt_types"),
+      "TEX" = dbGetQuery(SALI, "select * from sit_textures")
+    )
+  saveRDS(decodes, decode_datafile)
+}
+      
+      
+
+
+
+```
