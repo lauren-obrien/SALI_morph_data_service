@@ -186,7 +186,7 @@ plot(dplyr::filter(layer_3, PROJECT_CODE == 'BAB')['DISTURB_TYPE'], pch = 20)
 
 ### Layer 4 - Surface Coarse Fragments and Rock Outcrop
 
-NB review abundance column as the decoes aren't quite the same...
+NB review abundance column as the decodes aren't quite the same...
 
 ```{r layer4}
 
@@ -255,10 +255,18 @@ sit_colours <- dbGetQuery(SALI,
                            join sit_colour_convert ccv 
                            on ccv.sali_colour = col.colour_code")
 
+hdepths <- sit_data[['HOR']] %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, 
+                UPPER_DEPTH, LOWER_DEPTH)
+
 layer_6 <- sit_data[['COL']] %>% 
   dplyr::select(-matches('CREAT'), -matches('UPDAT')) %>% 
   left_join(., sit_colours, by = c('COLOUR_BOOK', 'COLOUR_CODE')) %>% 
   left_join(., loc, by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO')) %>% 
+  left_join(., hdepths, by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO',
+                               'HORIZON_NO')) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, 
+                UPPER_DEPTH, LOWER_DEPTH, everything()) %>% 
   filter(!is.na(LONGITUDE)) %>% 
   st_as_sf(., coords = c('LONGITUDE', 'LATITUDE'), crs = 4283) 
 
@@ -300,7 +308,10 @@ layer_7 <- sit_data[['MOT']] %>%
                      COLOUR_BOOK == 'Y' & COLOUR_CODE == 'L' ~ '737D73',
                      COLOUR_BOOK == 'Y' & COLOUR_CODE == 'P' ~ 'D1C7BD',
                      TRUE ~ HEX_VALUE)) %>% 
-  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, MOTT_NO,
+  left_join(., hdepths, by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO',
+                               'HORIZON_NO')) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, UPPER_DEPTH, 
+                LOWER_DEPTH, MOTT_NO,
                 MOTT_TYPE, MOTT_ABUND, MOTT_SIZE, CONTRAST, COLOUR_CODE, 
                 MOISTURE_STAT, MOTT_BOUND_DISTINCT, everything()) %>% 
   left_join(., loc, by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO')) %>% 
@@ -316,10 +327,13 @@ layer_7 <- sit_data[['MOT']] %>%
 
 layer_8 <- sit_data[['STR']] %>% 
   dplyr::select(-matches('CREAT'), -matches('UPDAT')) %>% 
+  left_join(., hdepths, by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO',
+                               'HORIZON_NO')) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, UPPER_DEPTH, 
+                LOWER_DEPTH, STRUCT_NO, everything()) %>% 
   left_join(., loc, by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO')) %>% 
   filter(!is.na(LONGITUDE)) %>% 
-  st_as_sf(., coords = c('LONGITUDE', 'LATITUDE'), crs = 4283) 
-
+  st_as_sf(., coords = c('LONGITUDE', 'LATITUDE'), crs = 4283)
 
 # e.g.
 plot(dplyr::filter(layer_8, PROJECT_CODE == 'BAB' &
@@ -364,9 +378,11 @@ layer_9 <- reduce(list(hcf, seg, pan),
                     full_join(x, y, by = intersect(names(x), names(y)))
                     }
                   ) %>% 
-  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, PARAM, PARAM_NO,
-                ABUNDANCE, LITH_CODE, ALTERATION, 
-                everything()) %>%
+  left_join(., hdepths, by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO',
+                               'HORIZON_NO')) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, UPPER_DEPTH, 
+                LOWER_DEPTH, PARAM, PARAM_NO, ABUNDANCE, LITH_CODE, 
+                ALTERATION, everything()) %>%
   left_join(., loc, by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO')) %>% 
   filter(!is.na(LONGITUDE)) %>% 
   st_as_sf(., coords = c('LONGITUDE', 'LATITUDE'), crs = 4283) 
@@ -403,8 +419,10 @@ layer_10 <- reduce(list(cut, fab),
                     full_join(x, y, by = intersect(names(x), names(y)))
                     }
                   ) %>% 
-  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, PARAM, PARAM_NO,
-                everything()) %>%
+  left_join(., hdepths, by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO',
+                               'HORIZON_NO')) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, UPPER_DEPTH,
+                LOWER_DEPTH, PARAM, PARAM_NO, everything()) %>%
   left_join(., loc, by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO')) %>% 
   filter(!is.na(LONGITUDE)) %>% 
   st_as_sf(., coords = c('LONGITUDE', 'LATITUDE'), crs = 4283) 
@@ -449,8 +467,10 @@ layer_11 <- reduce(list(crk, por, rts),
                     full_join(x, y, by = intersect(names(x), names(y)))
                     }
                   ) %>% 
-  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, PARAM, PARAM_NO,
-                everything()) %>%
+  left_join(., hdepths, by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO',
+                               'HORIZON_NO')) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, UPPER_DEPTH,
+                LOWER_DEPTH, PARAM, PARAM_NO, everything()) %>%
   left_join(., loc, by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO')) %>% 
   filter(!is.na(LONGITUDE)) %>% 
   st_as_sf(., coords = c('LONGITUDE', 'LATITUDE'), crs = 4283) 
@@ -467,8 +487,11 @@ layer_12 <- do.call('rbind', list(sit_data[['FT_PH']], sit_data[['FT_EC']],
                                   sit_data[['FT_DS']], sit_data[['FT_SL']],
                                   sit_data[['FT_FZ']], sit_data[['FT_H2']])) %>% 
   dplyr::select(-matches('CREAT'), -matches('UPDAT')) %>% 
-  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, TEST_NO,
-                everything()) %>% 
+  left_join(., hdepths, by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO',
+                               'HORIZON_NO')) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, UPPER_DEPTH,
+                LOWER_DEPTH, TEST_NO, everything()) %>% 
+  rename(TEST_DEPTH = DEPTH) %>% 
   dplyr::arrange(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, TEST_NO, DEPTH) %>%
   left_join(., loc, by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO')) %>% 
   filter(!is.na(LONGITUDE)) %>% 
@@ -484,9 +507,20 @@ plot(sph['VALUE'],  pch = 20)
 
 ### Layer 13 - Samples
 
-TODO List available analytes (in general terms e.g. 'has pH EC Cations' etc)
+TODO List available analytes (in general terms e.g. 'has pH, EC, Cations' etc)
 
 Provide cross link to soil-chem API at sample level??? No webpage interface tho... would return JSON.
+
+Query form would be 
+```{r getlab, eval = FALSE} 
+chem_api <- "https://soil-chem.information.qld.gov.au/odata/"
+results_endpoint <- "SiteLabMethodResults?"
+filter <- paste0("%24filter=ProjectCode%20eq%20'", project_code,
+                 "'%20and%20SiteId%20eq%20", site_id,
+                 "%20and%20ObservationNumber%20eq%20", obs_no,
+                 "%20and%20SampleNumber%20eq%20", sample_no)
+qry <- paste0(chem_api, results_endpoint, filter)
+```
 
 ```{r layer13}
 ## mapped lab codes to general groups manually beforehand
