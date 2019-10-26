@@ -217,9 +217,9 @@ codes <- sort(unique(texcode_stats$TEXTURE))
 psa_plots <- lapply(codes, function(x) {
   
   texs <- dplyr::filter(tex_psa_norm, TEXTURE == x) %>% 
-  rowwise() %>% 
-  mutate(SAND = sum(c(PSA_CS, PSA_FS), na.rm = TRUE)) %>% 
-  ungroup()
+    rowwise() %>% 
+    mutate(SAND = sum(c(PSA_CS, PSA_FS), na.rm = TRUE)) %>% 
+   ungroup()
   
   nt <- nrow(texs)
   med_tex <- summarise_all(texs, median)
