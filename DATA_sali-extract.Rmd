@@ -325,13 +325,6 @@ Get decodes into another list
 decode_datafile <- file.path(getwd(), 'SALI_DATA', 
                              paste0('SALI_SIT-data_decodes_', today, '.rds'))
 
-temp1 <- c("with temp1 as (
-             select project_code from reg_projects 
-             where site_qc_status = 'P'
-             and avail_status = 'E') ")
-
-# sali ref codes then dedicated tables
-
 if(file.exists(decode_datafile)) {
   decodes <- readRDS(decode_datafile)
 } else {
@@ -344,6 +337,9 @@ if(file.exists(decode_datafile)) {
                    "select * from sali_ref_codes
                     order by rv_domain, rv_low_value"
         ) ,
+      # the others are large enough to have their own tables
+      "COL" = dbGetQuery(SALI, "select * from sit_colours"),
+      "CLV" = dbGetQuery(SALI, "select * from sit_colour_convert"),
       "ELE" = dbGetQuery(SALI, "select * from sit_elem_types"),
       "ERD" = dbGetQuery(SALI, "select * from sit_erosion_degrees"),
       "ERT" = dbGetQuery(SALI, "select * from sit_erosion_types"),

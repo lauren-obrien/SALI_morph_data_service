@@ -43,10 +43,14 @@ SALI <- dbConnect(dbDriver('Oracle'),
 Load data snapshot from 'DATA_sali-extract.Rmd'.
 
 ```{r getdat}
-today <- '20191023' 
+today <- '20191025' 
 sit_datafile <- file.path(getwd(), 'SALI_DATA', 
                           paste0('SALI_SIT-data_', today, '.rds'))
+decode_datafile <- file.path(getwd(), 'SALI_DATA', 
+                             paste0('SALI_SIT-data_decodes_', today, '.rds'))
+
 sit_data <- readRDS(sit_datafile)
+decodes  <- readRDS(decode_datafile)
 ```
 
 ## Service structure
@@ -142,31 +146,31 @@ l1_dist <-
   summarise(DISTURBANCE = as.character(max(as.integer(DISTURB_TYPE))))
 ```
 
-#### Microrelief 
+#### Microrelief presence
 
-The following simplifies the SALI records down to 'present'/'confirmed absent'/'not recorded', for 'landscape' microrelief only - that which is controlled by inherent soil and parent material properties. As such, the gilgai types are retained, along with karst country and mound/depression microrelief. Excluded are biotic microrelief (as its often ephemeral/changeable), limited-extent features like sinkholes and springs, and microrelief induced by loss of vegetation cover (e.g. terracettes and slumps).
+The following simplifies the SALI microrelief records down to 'present'/'confirmed absent'/'not recorded', for 'landscape' microrelief only - that which is controlled by inherent soil and parent material properties. As such, the gilgai types are retained, along with karst and mound/depression microrelief. Excluded are biotic microrelief (as its often ephemeral/changeable), limited-extent features like sinkholes and springs, and microrelief induced by loss of vegetation cover (e.g. terracettes and slumps).
 
 ```{r l1_gilgai}
-L1_gilgai <-
+l1_gilgai <-
   dplyr::select(sit_data[['MIC']],
                 PROJECT_CODE, SITE_ID, OBS_NO, MICRO_NO, MICRO_TYPE) %>%
   group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>%
-  summarise(GILGAI_PRESENCE = {
+  summarise(GILGAI_PRESENT = {
     if (all(is.na(MICRO_TYPE))) {
-      NA
+      NA_character_
     } else if (any(MICRO_TYPE %in% c('A', 'C', 'G', 'K', 'L', 'M', 'N'))) {
-      TRUE
+      'Yes'
     } else if (any(MICRO_TYPE == 'Z')) {
-      FALSE
+      'No'
     } else {
-      NA
+      NA_character_
     }
   })
 ```
 
 #### Surface coarse fragments
 
-Multiple records can be created for surface coarse fragments where e.g. poorly sorted lag gravels exist. Below, surface coarse fragment data is simplified to report total abundance, and then both the maximum and most abundant size fractions observed. Lithology and shape are omitted for now as they may not be highly relevant to modelling e.g. surface water infiltration.
+Multiple records can be created for surface coarse fragments where e.g. poorly sorted lag gravels exist. Below, surface coarse fragment data is simplified to report total abundance category, and then both the maximum and most abundant size fractions observed. Lithology and shape are omitted for now as they may not be highly relevant to modelling e.g. surface water infiltration.
 
 ```{r l1_scfs}
 # decode coarse frag abundance categories to percentage ranges - see Yellow Book
@@ -240,13 +244,15 @@ tot_abund <- function(x = NULL) {
 
 l1_outcrop <- 
   dplyr::select(sit_data[['OTC']],
-                PROJECT_CODE, SITE_ID, OBS_NO, OUTCROP_NO, ABUNDANCE) %>% 
+                PROJECT_CODE, SITE_ID, OBS_NO, OUTCROP_NO, ABUNDANCE, LITH_CODE) %>% 
   rename(OUTCROP_ABUND = ABUNDANCE) %>% 
   # handle historical code '-'
   mutate_if(is.character, list(~na_if(., '-'))) %>%
   group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>%
   summarise(OUTCROP_TOTAL_ABUND = 
-              ifelse(n() == 1, OUTCROP_ABUND, tot_abund(OUTCROP_ABUND)))
+              ifelse(n() == 1, OUTCROP_ABUND, tot_abund(OUTCROP_ABUND)),
+            OUTCROP_DOM_LITH_CODE = ifelse(n() == 1, LITH_CODE, 
+                     LITH_CODE[which(OUTCROP_ABUND == max(OUTCROP_ABUND))][1]))
 
 ```
 
@@ -254,7 +260,7 @@ NB: check for any sites with both outcrop and SCF maxed out...
 
 ### Profile summary parameters
 
-Many summaries of soil profile characteristics can be reported at the observation level. These include a number that have been specifically requested for SLGA II, others from the ASRIS tech spec (v1.6), and others can be derived from diagnostic criteria used in the ASC.
+Many summaries of soil profile characteristics can be reported at the observation level. These include a number that have been specifically requested for SLGA II, others from the ASRIS tech spec (v1.6), and others can be derived from diagnostic criteria used in the ASC. More may be added, potentially on request.
 
   * Depth of A1 horizon
   * Total depth of A horizons
@@ -266,9 +272,9 @@ Many summaries of soil profile characteristics can be reported at the observatio
   * Name of deepest horizon (can help with interpretation of DOA)
   * Min and Max A and B textures
   * Presence/absence of bleached A2 horizon
-  * Substrate nature (unconsolidated, consolidated etc)
   * 'duplexiness' (clay content contrast between A and B plus sharpness of change)
-  * Surface horizon colour, B2 colour (and ASC colour class)
+  * hardsetting status (T/F/NA)
+  * Surface horizon colour, B2 colour (as ASC colour class and hex)
 
 #### Depth of A1
 
@@ -281,7 +287,7 @@ d_A1 <-
   dplyr::filter(is.na(DESIGN_NUM_PREFIX)) %>% 
   dplyr::filter(DESIGN_SUBDIV %in% c(1, 10, 11, 12, 13, 14, 15)) %>% 
   group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>% 
-  summarise(depth_of_A1 = max(LOWER_DEPTH, na.rm = TRUE))
+  summarise(DEPTH_OF_A1 = max(LOWER_DEPTH, na.rm = TRUE))
 
 # TODO check whether A with no subdiv should count as A1 in this context
 ```
@@ -296,7 +302,8 @@ d_A <-
   dplyr::filter(DESIGN_MASTER %in% c('A', 'A?')) %>% 
   dplyr::filter(is.na(DESIGN_NUM_PREFIX)) %>% 
   group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>% 
-  summarise(depth_of_A = max(LOWER_DEPTH, na.rm = TRUE))
+  summarise(DEPTH_OF_A = max(LOWER_DEPTH, na.rm = TRUE))
+
 ```
 
 #### Depth to B2
@@ -310,7 +317,7 @@ d_B2 <-
   dplyr::filter(is.na(DESIGN_NUM_PREFIX)) %>% 
   dplyr::filter(DESIGN_SUBDIV %in% c(2, seq(20, 29))) %>% 
   group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>% 
-  summarise(depth_to_B2 = min(UPPER_DEPTH, na.rm = TRUE))
+  summarise(DEPTH_TO_B2 = min(UPPER_DEPTH, na.rm = TRUE))
 
 ```
 
@@ -334,6 +341,7 @@ d_2r_hor <- dplyr::filter(sit_data[['HOR']], DESIGN_MASTER == 'R') %>%
 d_pan <- 
   dplyr::filter(sit_data[['PAN']], !is.na(CEMENTATION)) %>% 
   dplyr::filter(!(CEMENTATION %in% c('0', '1'))) %>% 
+  dplyr::filter(CONTINUITY == 'C') %>% 
   dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, PAN_NO, 
                 CEMENTATION) %>% 
   inner_join(.,
@@ -343,7 +351,7 @@ d_pan <-
   group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>% 
   summarise(DEPTH_HARDPAN = min(UPPER_DEPTH, na.rm = TRUE))
 
-# TODO check if pans should also be Continuous or of a particular type
+# TODO check if pans should also be restricted by type
   
 d_pwt <- dplyr::filter(sit_data[['OBS']], 
                        FREE_WATER_FLAG == 'Y' | !is.na(DEPTH_WATER)) %>% 
@@ -362,8 +370,9 @@ d_pwt <- dplyr::filter(sit_data[['OBS']],
 d_phys_imp <- reduce(list(d_2r_hor, d_pan, d_pwt), full_join,
                      by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO')) %>% 
   rowwise() %>% 
-  mutate(DEPTH_IMPED = min(DEPTH_R_HOR, DEPTH_HARDPAN, DEPTH_WATER, 
-                           na.rm = TRUE))
+  mutate(DEPTH_TO_IMPEDANCE = min(DEPTH_R_HOR, DEPTH_HARDPAN, DEPTH_WATER, 
+                           na.rm = TRUE)) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, DEPTH_TO_IMPEDANCE)
 
 ```
 
@@ -381,7 +390,7 @@ d_sol <-
   dplyr::filter(is.na(DESIGN_NUM_PREFIX)) %>% 
   dplyr::filter(grepl('A|B', DESIGN_MASTER)) %>% 
   group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>% 
-  summarise(DEPTH_SOLUM = max(LOWER_DEPTH, na.rm = TRUE))
+  summarise(DEPTH_OF_SOLUM = max(LOWER_DEPTH, na.rm = TRUE))
 
 ```
 
@@ -398,16 +407,26 @@ d_obs <-
 
 ```
 
+May as well put all the depths together and check for crazy
+
+```{r depths}
+l1_depths <- reduce(list(d_A1, d_A, d_B2, d_phys_imp, d_sol, d_obs),
+                   full_join, by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO'))
+
+
+```
+
+
 #### Number of horizons
 
-Only horizons with names are counted here - profiles with no named horizons will get a count of 0. These may be related to surface samples or samples taken at set depths for C analysis, as SALI only recently decoupled sample entry from horizon entry. Some are also related to sites with low data quality - where most data is just missing for unknown reasons.
+Only horizons with names are counted here - profiles with no named horizons will get a count of 0. These may be related to surface samples or samples taken at set depths for organic carbon analysis, as SALI only recently decoupled sample entry from horizon entry (so 'dummy horizons' exist on some observations). Some are also related to observations with low data quality - where most data is just missing for unknown reasons.
 
 ```{r hcnt}
 h_count <- 
   dplyr::select(sit_data[['HOR']], 
                 PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NAME) %>% 
   group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>% 
-  summarise(H_COUNT = sum(!is.na(HORIZON_NAME))) 
+  summarise(HORIZON_COUNT = sum(!is.na(HORIZON_NAME))) 
 
 ```
 
@@ -423,7 +442,7 @@ hname_max <-
   left_join(., h_count, by = c('PROJECT_CODE', 'SITE_ID' ,'OBS_NO')) %>% 
   dplyr::filter(HORIZON_NO == H_COUNT) %>% 
   dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NAME) %>% 
-  rename(MAX_H_NAME = HORIZON_NAME)
+  rename(DEEPEST_HORIZON = HORIZON_NAME)
   
 ```
 
@@ -539,182 +558,217 @@ It may be useful, then, to define a combined scale of texture contrast behaviour
 
   * NA - insufficient data to diagnose
   * 0 - no texture contrast present by any accepted definition
-  * 1 - minimal texture jump allowable - 4 ranks in GROUP_2 e.g. LS over SCL or SCL over LMC. Can't both be clays.
-  * 2 - moderate texture jump - 5-8 ranks eg. S over CLS, SL over CL, L over LC
-  * 3 - maximal texture jump - more than 8 ranks e.g. S over CL, SL over LMC
+  * 1 - minimal texture jump allowable - at least 5 or 6 ranks in GROUP_2 e.g. LS over SCL or SCL over LMC. Can't both be clays.
+  * 2 - moderate texture jump - 7-9 ranks eg. S over CLS, SL over CL, L over LC
+  * 3 - maximal texture jump - more than 9 ranks e.g. S over CL, SL over LMC
 
-By the above, rank 3's should usually key out as SO/CH/KU in the ASC, and many of the rank 2's probably should as well. 
-Not sure whether to bring in further horizon nomenclature, B2 structure or bleach presence. They can co-occur - more pronounced TC soils often have bleached A2s, for example - but might just be confusing the issue. 
+By the above, rank 3's should always key out as SO/CH/KU in the ASC, and many of the rank 2's probably should as well.
+
+Note that there'll be a bunch of these that almost make the cut by recorded morphpology alone, but are either not classified because boundary sharpness data is missing, or ranked too low because boundary sharpness data is wrong. If the soil classification on one of these sites is an ASC SO/CH/KU, or a PPF of D*, they should be regarded as texture contrast soils too. The code below includes some overrides on the basis of classification.
 
 ```{r duplexiness}
-# get bound_distinct of last A horizon in profile
-A_bnd <- sit_data[['HOR']] %>% 
+# get bound_distinct of last A  or B1 horizon in profile
+last_bnd_distinct <- sit_data[['HOR']] %>% 
   dplyr::filter(is.na(DESIGN_NUM_PREFIX)) %>% 
-  dplyr::filter(DESIGN_MASTER %in% c('A', 'A?')) %>% 
+  dplyr::filter(DESIGN_MASTER %in% c('A', 'A?') | 
+                  # B1 horizons:
+                  DESIGN_MASTER == 'B' & 
+                    grepl('^1', DESIGN_SUBDIV) & 
+                      is.na(DESIGN_NUM_PREFIX)) %>% 
   group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>% 
   dplyr::filter(HORIZON_NO == max(HORIZON_NO)) %>% 
   ungroup() %>% 
   dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, HORIZON_NAME,
                 TEXTURE, BOUND_DISTINCT) %>% 
-  mutate(TCB_A = case_when(BOUND_DISTINCT %in% c('S', 'A', 'C') ~ TRUE,
-                           is.na(BOUND_DISTINCT) ~ NA,
-                           TRUE ~ FALSE)) %>% 
-  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, TEXTURE, TCB_A) %>% 
-  rename(LAST_A_NO = HORIZON_NO)
+  mutate(SHARP_ENOUGH = case_when(BOUND_DISTINCT %in% c('S', 'A', 'C') ~ TRUE,
+                                  is.na(BOUND_DISTINCT) ~ NA,
+                                  TRUE ~ FALSE)) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, HORIZON_NAME, TEXTURE, 
+                BOUND_DISTINCT, SHARP_ENOUGH) %>% 
+  rename(LAST_HORIZON_NO = HORIZON_NO, SURFACE_TEXTURE = TEXTURE,
+         SURF_HNAME = HORIZON_NAME)
 
 # for profiles in the above, check if the next horizon down is a B2 
-athenB <- A_bnd %>%   
-  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, LAST_A_NO) %>% 
-  mutate(HORIZON_NO = LAST_A_NO + 1) %>% 
+is_next_B2 <- last_bnd_distinct %>%   
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, LAST_HORIZON_NO) %>% 
+  mutate(HORIZON_NO = LAST_HORIZON_NO + 1) %>% 
   left_join(., dplyr::select(sit_data[['HOR']], 
                              PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO,
                              DESIGN_MASTER, DESIGN_NUM_PREFIX,
-                             DESIGN_SUBDIV, HORIZON_NAME),
+                             DESIGN_SUBDIV, HORIZON_NAME, TEXTURE),
             by = c("PROJECT_CODE", "SITE_ID", "OBS_NO", "HORIZON_NO")) %>% 
-  mutate(A_OVER_B2 = case_when(DESIGN_MASTER %in% c('B', 'B?') &
-                                is.na(DESIGN_NUM_PREFIX) &
-                              grepl('^2', DESIGN_SUBDIV) ~ TRUE,
-                              # unspecified B also allowed 
-                              DESIGN_MASTER %in% c('B', 'B?') &
-                                is.na(DESIGN_NUM_PREFIX) &
-                                is.na(DESIGN_SUBDIV) ~ TRUE, 
-                              is.na(HORIZON_NAME) ~ NA,
-                               TRUE ~ FALSE)) %>% 
-  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, A_OVER_B2) 
+  mutate(IS_OVER_B2 = case_when(DESIGN_MASTER %in% c('B', 'B?') &
+                               is.na(DESIGN_NUM_PREFIX) &
+                               grepl('^2', DESIGN_SUBDIV) ~ TRUE,
+                             # unspecified B also allowed 
+                             DESIGN_MASTER %in% c('B', 'B?') &
+                               is.na(DESIGN_NUM_PREFIX) &
+                               is.na(DESIGN_SUBDIV) ~ TRUE, 
+                             is.na(HORIZON_NAME) ~ NA,
+                             TRUE ~ FALSE)) %>%
+  mutate(NEXT_TEXTURE = ifelse(IS_OVER_B2 == TRUE, TEXTURE, NA)) %>% 
+  rename(NEXT_HNAME = HORIZON_NAME) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, NEXT_HNAME, IS_OVER_B2, NEXT_TEXTURE) 
 
-# repeat for B1 over B2
+# factorise group 2
+group_2 <- dplyr::select(tex_ranks, TEXTURE, GROUP_2) %>% 
+  mutate(GROUP_2 = 
+           factor(GROUP_2,
+                  levels = c('gravel', 
+                             'sand', 'loamy sand', 'clayey sand',
+                             'peat', 'mineral peat', 
+                             'sandy loam', 'loam', 'sandy clay loam', 'silty loam',
+                             'clay loam, sandy', 'clay loam, silty', 'clay loam',
+                             'light clay', 'light medium clay', 'medium clay', 
+                             'medium heavy clay', 'heavy clay'), 
+         ordered = TRUE))
 
-# get bound_distinct of last B1 in profile (where present)
-B1_bnd <- sit_data[['HOR']] %>% 
-  dplyr::filter(is.na(DESIGN_NUM_PREFIX)) %>% 
-  dplyr::filter(DESIGN_MASTER %in% c('B', 'B?')) %>% 
-  dplyr::filter(grepl('^1', DESIGN_SUBDIV)) %>% 
-  group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>% 
-  dplyr::filter(HORIZON_NO == max(HORIZON_NO)) %>% 
-  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, HORIZON_NAME,
-                TEXTURE_CODE, TEXTURE_QUALIFIER, BOUND_DISTINCT) %>% 
-  mutate(TCB_B1 = case_when(BOUND_DISTINCT %in% c('S', 'A', 'C') ~ TRUE,
-                           is.na(BOUND_DISTINCT) ~ NA,
-                           TRUE ~ FALSE)) %>% 
-  ungroup() %>% 
-  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, TCB_B1)  %>% 
-  rename(LAST_B1_NO = HORIZON_NO)
+# dplx soil classifs
+dupl_class <- dplyr::filter(sit_data[['CLA']], SOIL_CLASS_NO == 1) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, ASC_ORD, PPF) %>% 
+  mutate(PPF_TC = ifelse(grepl('^D(r|b|y|d|g)', PPF) == TRUE, TRUE, FALSE),
+         PPF_TC = ifelse(is.na(PPF), NA, PPF_TC),
+         ASC_TC = ifelse(ASC_ORD %in% c('CH', 'KU', 'SO'), TRUE, FALSE),
+         ASC_TC = ifelse(is.na(ASC_ORD), NA, ASC_TC), 
+         BOTH_TC = ifelse(PPF_TC == TRUE & ASC_TC == TRUE, TRUE, FALSE))
 
-
-# for profiles in the above, check if the next horizon down is a B2 
-B1thenB2 <- B1_bnd %>%   
-  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, LAST_B1_NO) %>% 
-  mutate(HORIZON_NO = LAST_B1_NO + 1) %>% 
-  left_join(., dplyr::select(sit_data[['HOR']], 
-                             PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO,
-                             DESIGN_MASTER, DESIGN_NUM_PREFIX,
-                             DESIGN_SUBDIV, HORIZON_NAME), 
-            by = c("PROJECT_CODE", "SITE_ID", "OBS_NO", "HORIZON_NO")) %>% 
-  mutate(B1_OVER_B2 = case_when(DESIGN_MASTER %in% c('B', 'B?') &
-                                is.na(DESIGN_NUM_PREFIX) &
-                              grepl('^2', DESIGN_SUBDIV) ~ TRUE,
-                              # unspecified B also allowed 
-                              DESIGN_MASTER %in% c('B', 'B?') &
-                                is.na(DESIGN_NUM_PREFIX) &
-                                is.na(DESIGN_SUBDIV) ~ TRUE, 
-                              is.na(HORIZON_NAME) ~ NA,
-                               TRUE ~ FALSE)) %>% 
-  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, B1_OVER_B2) %>% 
-  ungroup()
-
-# fair to say that B1s are almost always followed by B2s
-
-# join everything up and ID profiles that meet the horizon change part of the 
-# TC definition
-dat <- reduce(list(A_bnd, athenB, B1_bnd, B1thenB2), full_join) %>% 
-  mutate(SAC_AB = case_when(A_OVER_B2 == TRUE & TCB_A == TRUE ~ TRUE,
-                            A_OVER_B2 == TRUE & TCB_A == FALSE ~ FALSE,
-                            B1_OVER_B2 == TRUE & TCB_B1 == TRUE ~ TRUE,
-                            B1_OVER_B2 == TRUE & TCB_B1 == FALSE ~ FALSE,
-                            TRUE ~ NA))
-               
-# next: get the texture codes either side of the divide, where SAC_AB = TRUE
-tc_rating <- dat %>%
-  dplyr::select(-TEXTURE) %>% 
-  left_join(., 
-            dplyr::select(sit_data[['HOR']], PROJECT_CODE, SITE_ID, OBS_NO, 
-                          HORIZON_NO, TEXTURE),
-            by = c("PROJECT_CODE", "SITE_ID", "OBS_NO", "LAST_A_NO" = "HORIZON_NO")) %>% 
-  rename(LAST_A_TEX = TEXTURE) %>% 
-  left_join(., 
-            dplyr::select(sit_data[['HOR']], PROJECT_CODE, SITE_ID, OBS_NO, 
-                          HORIZON_NO, TEXTURE),
-            by = c("PROJECT_CODE", "SITE_ID", "OBS_NO", "LAST_B1_NO" = "HORIZON_NO")) %>% 
-  rename(LAST_B1_TEX = TEXTURE) %>% 
-  mutate(NEXT_B_NO = case_when(A_OVER_B2  == TRUE ~ LAST_A_NO + 1,
-                               B1_OVER_B2 == TRUE ~ LAST_B1_NO + 1,
-                            TRUE ~ NA_real_)) %>% 
-  left_join(., 
-            dplyr::select(sit_data[['HOR']], PROJECT_CODE, SITE_ID, OBS_NO, 
-                          HORIZON_NO, TEXTURE),
-            by = c("PROJECT_CODE", "SITE_ID", "OBS_NO", "NEXT_B_NO" = "HORIZON_NO")) %>% 
-  rename(TEX_BELOW_BNDRY = TEXTURE) %>% 
-  # condense last A/B1
-  mutate(TEX_ABOVE_BNDRY = LAST_A_TEX,
-         TEX_ABOVE_BNDRY = ifelse(is.na(TEX_ABOVE_BNDRY) & !is.na(LAST_B1_TEX), 
-                                  LAST_B1_TEX, TEX_ABOVE_BNDRY))
-# now conv to rank, calc jump, rate
-
-
+# rate
+duplexiness <- full_join(last_bnd_distinct, is_next_B2) %>% 
+  left_join(., group_2, by = c('SURFACE_TEXTURE' = 'TEXTURE')) %>% 
+  rename(SURFACE_GROUP = GROUP_2) %>% 
+  left_join(., group_2, by = c('NEXT_TEXTURE' = 'TEXTURE')) %>% 
+  rename(SUBSOIL_GROUP = GROUP_2) %>% 
+  mutate(RANK_JUMP = as.integer(SUBSOIL_GROUP) - as.integer(SURFACE_GROUP)) %>% 
+  mutate(DUPLEXINESS = case_when(is.na(SHARP_ENOUGH) ~ NA_real_,
+                                 is.na(SUBSOIL_GROUP) ~ NA_real_,
+                                 is.na(SURFACE_GROUP) ~ NA_real_,
+                                 SHARP_ENOUGH == FALSE | IS_OVER_B2 == FALSE ~ 0,
+                                 RANK_JUMP <= 4  ~ 0,
+                                 RANK_JUMP <  7  ~ 1,
+                                 RANK_JUMP <  10 ~ 2,
+                                 TRUE ~ 3),
+         DUPLEXINESS = ifelse(SURFACE_GROUP %in% 
+                                c('peat', 'mineral peat'), 0, DUPLEXINESS) # reset
+         ) %>% 
+  # override where soil classification says to
+  left_join(., dupl_class, by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO')) %>% 
+  mutate(DUPLEXINESS = case_when(PPF_TC == TRUE & ASC_TC == FALSE & RANK_JUMP > 6 & DUPLEXINESS < 2 ~ 2, 
+                                 PPF_TC == TRUE & ASC_TC == TRUE  & RANK_JUMP > 6 & DUPLEXINESS < 2 ~ 2,
+                                 PPF_TC == TRUE & ASC_TC == TRUE  & RANK_JUMP > 9 & DUPLEXINESS < 2 ~ 3,
+                                 # downgrade any VE's - A1's usually < 5cm thick
+                                 ASC_ORD == 'VE' & DUPLEXINESS > 0 ~ 1,
+                                 TRUE ~ DUPLEXINESS))  %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, DUPLEXINESS)
 
 ```
 
+#### Hardsetting status
 
+This has managment implications and is often requested.
+
+```{r hss}
+
+hardset <- sit_data[['SCN']] %>% 
+  group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>% 
+  summarise(HARDSETTING = ifelse('H' %in% STATUS, 'Yes', 'No'))
+
+```
+
+#### Surface colour
+
+This one's potentially handy for field ID of soils. Converting to ASC colour classes for simplicity and only using moist colours.
+
+```{r surf_col}
+sit_colours <- decodes[['COL']] %>% 
+  dplyr::select(COLOUR_BOOK, COLOUR_CODE, HUE, VALUE, CHROMA) %>% 
+  left_join(., decodes[['CLV']], by = c('COLOUR_CODE' = 'SALI_COLOUR')) %>% 
+  rename(HEX_COLOUR = RGB_VALUE) %>% 
+  mutate(ASC_COL_FAM = ifelse(HUE %in% c('5R', '7.5R', '10R', '2.5YR', '5YR'),
+                              'red_fam', 'yellow_fam'),
+         ASC_COL_CLASS = case_when(
+           ASC_COL_FAM == 'red_fam' & CHROMA >= 3 ~ 'Red',
+           ASC_COL_FAM == 'red_fam' & VALUE >= 4 ~ 'Grey',
+           ASC_COL_FAM == 'red_fam' & VALUE < 4 ~ 'Black',
+           ASC_COL_FAM == 'yellow_fam' & CHROMA >= 3 & VALUE <= 5 ~ 'Brown',
+           ASC_COL_FAM == 'yellow_fam' & CHROMA >= 4 & VALUE >= 6 ~ 'Yellow',
+           ASC_COL_FAM == 'yellow_fam' & CHROMA < 3 & VALUE <= 3  ~ 'Black',
+           ASC_COL_FAM == 'yellow_fam' & CHROMA < 4 & VALUE >= 4  ~ 'Grey',
+           TRUE ~ NA_character_
+         ))
+
+surf_col <- sit_data[['COL']] %>% 
+  dplyr::filter(HORIZON_NO == 1 & MOISTURE_STAT == 'M') %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, COLOUR_BOOK, COLOUR_CODE) %>% 
+  left_join(., sit_colours, by = c('COLOUR_BOOK', 'COLOUR_CODE')) %>% 
+  select(PROJECT_CODE, SITE_ID, OBS_NO, HEX_COLOUR, ASC_COL_CLASS) %>% 
+  rename(
+    SURFACE_HEX_COLOUR = HEX_COLOUR,
+    SURFACE_COLOUR_CLASS = ASC_COL_CLASS)
+  
+```
+
+#### B2 Colour Class
+
+As above. B2 colour class is also a key ASC diagnostic.
+
+```{r b2_col}
+hno_firstB2 <- sit_data[['HOR']] %>% 
+  filter(DESIGN_MASTER %in% c('B', 'B?') &
+           is.na(DESIGN_NUM_PREFIX) &
+           grepl('^2', DESIGN_SUBDIV) == TRUE) %>% 
+  group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>% 
+  summarise(HORIZON_NO = min(HORIZON_NO))
+
+B2_col <-  sit_data[['HOR']] %>% 
+  filter(DESIGN_MASTER %in% c('B', 'B?') &
+           is.na(DESIGN_NUM_PREFIX) &
+           grepl('^2', DESIGN_SUBDIV) == TRUE) %>% 
+  inner_join(., hno_firstB2, 
+             by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO', 'HORIZON_NO')) %>%
+  left_join(., sit_data[['COL']], 
+            by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO', 'HORIZON_NO')) %>% 
+  filter(HOR_COL_NO == 1 & MOISTURE_STAT != 'D') %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, HORIZON_NAME, COLOUR_BOOK, COLOUR_CODE) %>% 
+  left_join(., sit_colours, by = c('COLOUR_BOOK', 'COLOUR_CODE')) %>% 
+  select(PROJECT_CODE, SITE_ID, OBS_NO, HEX_COLOUR, ASC_COL_CLASS) %>% 
+  rename(
+    B2_HEX_COLOUR = HEX_COLOUR,
+    B2_COLOUR_CLASS = ASC_COL_CLASS)
+  
+```
+
+***
+
+### Assemble final layer
 
 The layer components are now joined to create a one-row-per-observation dataset.
 
 ```{r l1_all}
-layer_one <- left_join(l1_core, l1_gilgai, 
-                       by = c('PROJECT_CODE','SITE_ID', 'OBS_NO')) %>% 
-  left_join(., l1_dist,  by = c('PROJECT_CODE','SITE_ID', 'OBS_NO')) %>% 
-  left_join(., l1_scf,  by = c('PROJECT_CODE','SITE_ID', 'OBS_NO')) %>% 
-  arrange(PROJECT_CODE, SITE_ID, OBS_NO)
 
-layer_one_pts <- 
-  st_as_sf(layer_one, coords = c('LONGITUDE', 'LATITUDE'), crs = 4283)
+layer_one_final <- 
+  reduce(list(l1_simple, l1_dist, l1_gilgai, hardset,
+              duplexiness, l1_scf, l1_outcrop,l1_depths, h_count,
+              hname_max, AB_textures, surf_col, B2_col),
+         full_join, by = c('PROJECT_CODE','SITE_ID', 'OBS_NO')) %>% 
+  filter(!is.na(LONGITUDE)) %>% 
+  st_as_sf(coords = c('LONGITUDE', 'LATITUDE'), crs = 4283)
 
-plot(layer_one_pts['GILGAI_PRESENCE'], pch = 20)
+# e.g.
+pltest <- dplyr::filter(layer_one_final, PROJECT_CODE == 'MDIA')
+
+cols <-sort(unique(paste0('#', pltest$B2_HEX_COLOUR)))
+cols <- cols[-which(cols == '#NA')]
+
+ggplot() +
+  geom_sf(data = pltest, aes(colour = B2_HEX_COLOUR), pch = 16, size = 3,
+          show.legend = FALSE) +
+  scale_colour_manual(values = cols,
+                      labels = sort(unique(pltest$B2_HEX_COLOUR))) +
+  theme_minimal()
+
+
+
 ```
-
-
-
-
-
-
-## Layer 2
-
-Primary keys are `PROJECT_CODE`, `SITE_ID`, `OBS_NO`, `HORIZON_NO`.
-
-Data is filtered as for Layer 1.
-
-## Horizon level data
-
-  * Horizon name
-  * upper and lower depth
-  * horizon boundary distinctness
-  * soil moisture status
-  * strength/consistency
-  * Texture code + qualifier
-  * Colour and mottles
-  * structural data
-  * coarse frags (need all for PAW!)
-  * segregations
-  * pans
-  * cutans
-  
-No need for samples, that stuff is in the existing lab data API. Not sure about field tests at this stage.
-
-
-  
-
-  
-  
-
 
 
 
