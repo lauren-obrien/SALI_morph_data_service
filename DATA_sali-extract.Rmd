@@ -2,13 +2,13 @@
 title: "TERN - morphology data for SLGA II - Get Data"
 output: html_document
 author: "Lauren O'Brien"
-date: `r Sys.Date()`
+date: "`r Sys.Date()`"
 editor_options: 
   chunk_output_type: console
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE, results = 'hold', fig.height = 6,
+knitr::opts_chunk$set(echo = TRUE, results = 'hold', fig.height = 6,
                       fig.align = 'center', warning = FALSE, message = FALSE,
                       eval = TRUE)
 ```
@@ -46,47 +46,47 @@ Take a snapshot of SALI sites module to work with offline. Filter on data that's
 
 The data-holding tables in the sites module are structured as follows:
 
-1 SIT_SITES
-    2 SIT_SITE_LAND_USES
-    3 SIT_SITE_MAN_PRACS
-    4 SIT_ELEM_GEOMORPHS 
-    5 SIT_PATT_GEOMORPHS 
-    6 SIT_NOTES 
-    7 SIT_OBSERVATIONS
-        8  SIT_LOCATIONS
-        9  SIT_SOIL_CLASSIFICATIONS
-        10 SIT_DISTURBANCES 
-        11 SIT_SURFACE_CONDITIONS
-        12 SIT_MICRORELIEFS
-        13 SIT_EROSIONS
-        14 SIT_SURF_COARSE_FRAGS
-        15 SIT_ROCK_OUTCROPS
-        16 SIT_SUB_MINERAL_COMPS
-        17 SIT_VEG_COMMUNITIES
-            18 SIT_VEG_STRATA
-            19 SIT_VEG_STRATA_SPECIES
-        20 SIT_HORIZONS
-            21 SIT_HORIZON_SUFFICES
-            22 SIT_HORIZON_COLOURS
-            23 SIT_MOTTLES
-            24 SIT_COARSE_FRAGS
-            25 SIT_STRUCTURES
-            26 SIT_SEGREGATIONS
-            27 SIT_FABRICS
-            28 SIT_CUTANS
-            29 SIT_CRACKS
-            30 SIT_MACROPORES
-            31 SIT_STRENGTHS
-            32 SIT_PANS
-            33 SIT_ROOTS
-            34 SIT_FIELD_TESTS
-        35 SIT_SAMPLES
-            36 SIT_LAB_RESULTS
+  1. SIT_SITES
+      2. SIT_SITE_LAND_USES
+      3. SIT_SITE_MAN_PRACS
+      4. SIT_ELEM_GEOMORPHS 
+      5. SIT_PATT_GEOMORPHS 
+      6. SIT_NOTES 
+      7. SIT_OBSERVATIONS
+          8.  SIT_LOCATIONS
+          9.  SIT_SOIL_CLASSIFICATIONS
+          10. SIT_DISTURBANCES 
+          11. SIT_SURFACE_CONDITIONS
+          12. SIT_MICRORELIEFS
+          13. SIT_EROSIONS
+          14. SIT_SURF_COARSE_FRAGS
+          15. SIT_ROCK_OUTCROPS
+          16. SIT_SUB_MINERAL_COMPS
+          17. SIT_VEG_COMMUNITIES
+              18. SIT_VEG_STRATA
+              19. SIT_VEG_STRATA_SPECIES
+          20. SIT_HORIZONS
+              21. SIT_HORIZON_SUFFICES
+              22. SIT_HORIZON_COLOURS
+              23. SIT_MOTTLES
+              24. SIT_COARSE_FRAGS
+              25. SIT_STRUCTURES
+              26. SIT_SEGREGATIONS
+              27. SIT_FABRICS
+              28. SIT_CUTANS
+              29. SIT_CRACKS
+              30. SIT_MACROPORES
+              31. SIT_STRENGTHS
+              32. SIT_PANS
+              33. SIT_ROOTS
+              34. SIT_FIELD_TESTS
+          35. SIT_SAMPLES
+              36. SIT_LAB_RESULTS
 
 Some additional tables hold decodes (meanings) for the coded data and are extracted separately below.
 
 ```{r getdat}
-today <- '20191026' # edit for fresh snapshot
+today <- '20191028' # edit for fresh snapshot
 
 sit_datafile <- file.path(getwd(), 'SALI_DATA', 
                           paste0('SALI_SIT-data_', today, '.rds'))
@@ -390,33 +390,75 @@ if(file.exists(sit_datafile)) {
 
 ### Decode Tables
 
-Decodes for short code lists are all in one large table called SALI_REF_CODES, grouped by field RV_DOMAIN
+Decodes for short code lists are all in one large table called SALI_REF_CODES, grouped by field RV_DOMAIN. See '/helpers/REF_CODE_DOMAINS_for_sites.xlsx' for some metadata.
 
 Longer code lists e.g. geology, landform elements are in their own tables
 
-1 SALI_REF_CODES (used all over)
-2 SIT_ELEM_TYPES 
-3 SIT_PATT_TYPES 
-4 SIT_GEOLOGIES  
-5 SIT_LAND_USES 
-6 SIT_LITHOLOGIES 
-7 SIT_MASS_GEN_TYPES
-8 SIT_ASCS
-9 SIT_PPFS
-10 SIT_GSGS
-11 SIT_EROSION_TYPES
-12 SIT_EROSION_DEGREES
-13 SIT_VEG_SPECIES
-14 SIT_STRUCT_FORMS
-15 SIT_TEXTURES
-16 SIT_COLOURS
-17 SIT_COLOUR_CONVERT
-18 SIT_FACIES
-19 SIT_FIELD_TEST_TYPES
-20 SIT_FIELD_TEST_TYPE_SPECS
-21 SIT_NOTE_TYPES
+  1. SALI_REF_CODES (used all over)
+  2. SIT_ELEM_TYPES 
+  3. SIT_PATT_TYPES 
+  4. SIT_GEOLOGIES  
+  5. SIT_LAND_USES 
+  6. SIT_LITHOLOGIES 
+  7. SIT_MASS_GEN_TYPES
+  8. SIT_ASCS
+  9. SIT_PPFS
+  10. SIT_GSGS
+  11. SIT_EROSION_TYPES
+  12. SIT_EROSION_DEGREES
+  13. SIT_VEG_SPECIES
+  14. SIT_STRUCT_FORMS
+  15. SIT_TEXTURES
+  16. SIT_COLOURS
+  17. SIT_COLOUR_CONVERT
+  18. SIT_FACIES
+  19. SIT_FIELD_TEST_TYPES
+  20. SIT_FIELD_TEST_TYPE_SPECS
+  21. SIT_NOTE_TYPES
 
 ```{r getdecodes}
+site_domains <-
+  c('AGGRADATION', 'ASC CONFIDENCE', 'ASC FAMILIES', 'ASC ORDERS', 
+    'ASC_FAMILY_LEVEL', 'BIOTIC AGENTS', 'BIOTIC COMPONENTS', 
+    'BOUNDARY DISTINCT', 'BOUNDARY SHAPES', 'CARBONATE EFF', 
+    'COARSE FRAG ABUND', 'COARSE FRAG DISTRIB', 'COARSE FRAG SHAPES', 
+    'COARSE FRAG SIZES', 'COLOUR BOOKS', 'COND DEGREE', 'CONTRASTS', 
+    'CRACK WIDTHS', 'CUTAN ABUND', 'CUTAN DISTINCT', 'CUTAN TYPES',
+    'DISP METHODS', 'DISPERSIONS', 'DISPERSIONS2', 'DISTURBANCE TYPES', 
+    'DRAINAGE', 'EC METHODS', 'ECSE METHODS', 'ELEM INC SLOPE',
+    'ELEM LOCATIONS', 'ELEVATION EVALUATIONS', 'EROSION GULLY DEPTHS', 
+    'EROSION STATES', 'FABRIC TYPES', 'FIELD TEXT GRADE', 'FOREST TYPES', 
+    'GEOMORPH AGENTS', 'GEOMORPH MODES', 'GEOMORPH STATUS',
+    'GILGAI PROPORTIONS', 'H2O2 REACTIONS', 'HORIZON MASTERS', 
+    'HORIZON SUFFIXES', 'INUND DEPTHS', 'INUND DURATIONS', 'INUND FREQ',
+    'INUND RUNON VEL', 'MAP REF TYPES', 'METHOD DOMAINS', 
+    'MICRORELIEF COMPONENT', 'MICRORELIEF TYPES', 'MINERAL COMP', 'MODAL SLOPE',
+    'MOISTURE STATUS', 'MORPH TYPES', 'MOTT ABUND', 'MOTT BOUND DISTINCT', 
+    'MOTT SIZES', 'MOTT TYPES', 'NOTE INFO TYPES', 'OBS ANALYSIS STATUS',
+    'OBS LOC MEASURE METH', 'OBS REASONS', 'OBS TYPES', 'PAN CEMENTATIONS',
+    'PAN CONTINUITY', 'PAN STRUCTURES', 'PAN TYPES', 'PERMEABILITY',
+    'PH METHODS', 'PHOTO TYPES', 'PLASTICITY DEGREE', 'PLASTICITY TYPES',
+    'PORE ABUND', 'PORE DIAMETERS', 'RAINFOREST COMPLEXITY', 
+    'RAINFOREST FLOR COMP', 'RAINFOREST INDICATOR GROW', 
+    'RAINFOREST LEAF SIZES', 'RELIEF CLASS', 'RELIEF MODAL SLOPE CLASS', 
+    'RIPENESS', 'ROCK OUTCROP ABUND', 'ROOT ABUND', 'ROOT SIZES', 'RUNOFF',
+    'SAMP DATA SOURCES', 'SAMPLE STATUS', 'SCLEROPHYLL', 'SEG ABUND', 
+    'SEG FORMS', 'SEG MAGNETIC ATTR', 'SEG NATURES', 'SEG SIZES',
+    'SEG STRENGTHS', 'SITE MAN PRACS', 'SITE TYPES', 'SLAK METHODS', 'SLAKING',
+    'SLAKING METHOD 1', 'SLAKING METHOD 2', 'SLAKING2', 'SLOPE CLASS', 
+    'SLOPE EVALUATION', 'SOIL WATER STATUS', 'STICKINESS', 'STRENGTH CLASS',
+    'STRENGTHS', 'STRM CHAN DEPTH WIDTH', 'STRM CHAN DEVELOPMENT', 
+    'STRM CHAN MIGRATION', 'STRM CHAN NET DIRECT', 'STRM CHAN NET INTEG', 
+    'STRM CHAN PATTERNS', 'STRM CHAN SPACING', 'STRUC CLODS FRAGS', 
+    'STRUC COMPOUND PED', 'STRUC PED GRADES', 'STRUC PED SIZES', 
+    'STRUC PED TYPES', 'SUBS CONFIDENCE', 'SUBS GRAIN SIZES', 
+    'SUBS MASS ALTERATION', 'SUBS MASS SPACE DISCONT', 'SUBS MASS STRENGTHS',
+    'SUBS OBS TYPES', 'SUBS POROSITY', 'SUBS SPEC FEATURES', 'SUBS STRUCTURES',
+    'SUBS TEXTURES', 'SURF CONDITION STATUS', 'TAX UNIT TYPES',
+    'TEXTURE QUALIFIERS', 'VEG STRAT COVER CLASS', 'VEG STRAT GROW FORMS',
+    'VEG STRAT HEIGHT CLASS', 'VEG STRATA CODES', 'WATER REPELLENCE', 
+    'WRB SOIL GROUP')
+
 decode_datafile <- file.path(getwd(), 'SALI_DATA', 
                              paste0('SALI_SIT-data_decodes_', today, '.rds'))
 
@@ -427,11 +469,13 @@ if(file.exists(decode_datafile)) {
     list(
       # SALI ref codes holds all the short lists 
       "SRC" = 
-        # not all of these domains are relevant but overkill to filter
         dbGetQuery(SALI,
                    "select * from sali_ref_codes
                     order by rv_domain, rv_low_value"
-        ) ,
+        ) %>% 
+        # not all domains are relevant to sites and there's also some mess I'm 
+        # sweeping under rug here >.> 
+        dplyr::filter(RV_DOMAIN %in% site_domains),
       "ELE" = dbGetQuery(SALI, "select * from sit_elem_types"),
       "PAT" = dbGetQuery(SALI, "select * from sit_patt_types"),
       "GEO" = dbGetQuery(SALI, "select * from sit_geologies"),
@@ -451,7 +495,7 @@ if(file.exists(decode_datafile)) {
       "FAC" = dbGetQuery(SALI, "select * from sit_facies"),
       "FTT" = dbGetQuery(SALI, "select * from sit_field_test_types"),
       "FTS" = dbGetQuery(SALI, "select * from sit_field_test_type_specs"),
-      "NTP" = dbGetQuery(SALI, "select * from sit_note_types"), 
+      "NTP" = dbGetQuery(SALI, "select * from sit_note_types") 
     )
   saveRDS(decodes, decode_datafile)
 }
@@ -462,13 +506,15 @@ if(file.exists(decode_datafile)) {
 
 Because why not?
 
-```{r biggp}
+```{r spp}
 # make locations spatial
 SIT_LOCATIONS <- st_as_sf(sit_data[['OLC']],
                           coords = c('LONGITUDE', 'LATITUDE'),
                           crs = 4283, remove = FALSE,
                           dim = 'XY')
+```
 
+```{biggp, eval = FALSE}
 # write locations to gpkg
 st_write(SIT_LOCATIONS, 
          file.path(getwd(), 'SALI_DATA',
@@ -501,7 +547,7 @@ decode_names <- c('REF_CODES', 'REF_ELEM_TYPES', 'REF_PATT_TYPES',
                   'REF_EROSION_TYPES', 'REF_EROSION_DEGREES', 'REF_VEG_SPECIES', 
                   'REF_STRUCT_FORMS', 'REF_TEXTURES', 'REF_COLOURS', 
                   'REF_COLOUR_CONVERT', 'REF_FACIES', 'REF_FIELD_TEST_TYPES', 
-                  'REF_FIELD_TEST_TYPE_SPECS')
+                  'REF_FIELD_TEST_TYPE_SPECS', 'REF_NOTE_TYPES')
 names(decodes) <- decode_names
 
 # add to gpkg
@@ -521,9 +567,10 @@ dbDisconnect(con)
 # easier to work with in R/Py, likely
 ```
 
-```{r plotdemo, echo = FALSE, results = 'hold'}
+#### Example plot
 
-sph_bab <- dplyr::filter(sit_data[['SIT_FIELD_TESTS']], PROJECT_CODE == 'BAB' &
+```{r plotdemo, results = 'hold'}
+sph_bab <- dplyr::filter(sit_data[['FTS']], PROJECT_CODE == 'BAB' &
                          TEST_TYPE == 'PH' & OBS_NO == 1 & 
                            HORIZON_NO  == 1 & TEST_NO == 1) %>% 
   left_join(., SIT_LOCATIONS, by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO')) %>% 
@@ -531,13 +578,14 @@ sph_bab <- dplyr::filter(sit_data[['SIT_FIELD_TESTS']], PROJECT_CODE == 'BAB' &
          VALUE = factor(VALUE, levels = sort(unique(VALUE)), ordered = TRUE)) %>% 
   st_as_sf(crs = 4283)
 
-phpal <- colorRampPalette(scales::brewer_pal('div', 'RdBu')(14))
+phpal <- colorRampPalette(RColorBrewer::brewer.pal(11, 'RdBu'))
 
 ggplot() +
   geom_sf(data = sph_bab, aes(col = VALUE), pch = 16, show.legend = 'point') +
   scale_colour_manual(values = phpal(14)) +
   labs(col = 'pH') +
-  ggtitle('Bundaberg 1:50,000 soil sites', subtitle = 'Surface Raupach pH') +
+  ggtitle('Project BAB soil sites', 
+          subtitle = 'Surface Raupach pH, Bundaberg area') +
   theme_minimal()
 
 ```
