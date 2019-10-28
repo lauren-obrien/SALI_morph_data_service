@@ -10,7 +10,7 @@ editor_options:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, results = 'hold', fig.height = 6,
                       fig.align = 'center', warning = FALSE, message = FALSE,
-                      eval = FALSE)
+                      eval = TRUE)
 ```
 
 ```{r pkgs, results = 'hide'}
@@ -21,6 +21,7 @@ library(ROracle)       # Oracle database drivers
 library(getPass)       # password management
 library(units)         # for working with unit-attributed data
 library(tidyverse)     # general data manipulation and display
+library(RSQLite)       # local db write
 
 Sys.setenv(
   'TNS_ADMIN'   = file.path('C:', 'Users', Sys.getenv('USERNAME'), 'Oracle'),
@@ -41,18 +42,56 @@ if(!dir.exists(file.path(getwd(), 'SALI_DATA'))) {
 
 ## Data snapshot
 
-Take a snapshot of relevant SALI tables to work with offline. Filter on data that's allowed out - from published projects where QC has been completed.
+Take a snapshot of SALI sites module to work with offline. Filter on data that's allowed out - from published projects where QC has been completed.
 
-Note: the SLGA data federator seems to want info from sit_site_man_pracs ("OBS_MNG_PRACS") but there's very little in there. Leaving it out unless requested.
+The data-holding tables in the sites module are structured as follows:
 
-Note2: tablelevels seems to want only pH field data but other field tests are also useful so they're all getting extracted. 
+1 SIT_SITES
+    2 SIT_SITE_LAND_USES
+    3 SIT_SITE_MAN_PRACS
+    4 SIT_ELEM_GEOMORPHS 
+    5 SIT_PATT_GEOMORPHS 
+    6 SIT_NOTES 
+    7 SIT_OBSERVATIONS
+        8  SIT_LOCATIONS
+        9  SIT_SOIL_CLASSIFICATIONS
+        10 SIT_DISTURBANCES 
+        11 SIT_SURFACE_CONDITIONS
+        12 SIT_MICRORELIEFS
+        13 SIT_EROSIONS
+        14 SIT_SURF_COARSE_FRAGS
+        15 SIT_ROCK_OUTCROPS
+        16 SIT_SUB_MINERAL_COMPS
+        17 SIT_VEG_COMMUNITIES
+            18 SIT_VEG_STRATA
+            19 SIT_VEG_STRATA_SPECIES
+        20 SIT_HORIZONS
+            21 SIT_HORIZON_SUFFICES
+            22 SIT_HORIZON_COLOURS
+            23 SIT_MOTTLES
+            24 SIT_COARSE_FRAGS
+            25 SIT_STRUCTURES
+            26 SIT_SEGREGATIONS
+            27 SIT_FABRICS
+            28 SIT_CUTANS
+            29 SIT_CRACKS
+            30 SIT_MACROPORES
+            31 SIT_STRENGTHS
+            32 SIT_PANS
+            33 SIT_ROOTS
+            34 SIT_FIELD_TESTS
+        35 SIT_SAMPLES
+            36 SIT_LAB_RESULTS
+
+Some additional tables hold decodes (meanings) for the coded data and are extracted separately below.
 
 ```{r getdat}
-today <- '20191025' # edit for fresh snapshot
+today <- '20191026' # edit for fresh snapshot
 
 sit_datafile <- file.path(getwd(), 'SALI_DATA', 
                           paste0('SALI_SIT-data_', today, '.rds'))
 
+# restricts to projects that are allowed out
 temp1 <- c("with temp1 as (
              select project_code from reg_projects 
              where site_qc_status = 'P'
@@ -63,49 +102,66 @@ if(file.exists(sit_datafile)) {
 } else {
   sit_data <- 
     list(
-      # LEVEL 1 - Sites
+      # 1 - Sites
       "SIT" = 
         dbGetQuery(SALI,
          paste0(temp1, 
                 "select * from temp1
                  inner join sit_sites using (project_code)
                  order by project_code, site_id")),
-      # LEVEL 2 - Observations
+      # 2 - Land Uses
+      # Contemporary to date(s) of observation(s) - these are not updated
+      "SLU" = 
+        dbGetQuery(SALI,
+         paste0(temp1, 
+                "select * from temp1
+                 inner join sit_site_land_uses using (project_code)
+                 order by project_code, site_id, land_use_no")),
+      # 3 site management practices
+      "SMP" = 
+        dbGetQuery(SALI,
+         paste0(temp1, 
+                "select * from temp1
+                 inner join sit_site_man_pracs using (project_code)
+                 order by project_code, site_id, man_prac_no")),
+      # 4 Geomorphology at element scale (radius 20m around site)
+      "SGE" = 
+        dbGetQuery(SALI,
+         paste0(temp1, 
+                "select * from temp1
+                 inner join sit_elem_geomorphs using (project_code)
+                 order by project_code, site_id, elem_geo_no")),
+      # 5 Geomorphology at pattern scale (radius 300m around site)
+      "SGP" = 
+        dbGetQuery(SALI,
+         paste0(temp1, 
+                "select * from temp1
+                 inner join sit_patt_geomorphs using (project_code)
+                 order by project_code, site_id, patt_geo_no")),   
+      # 6 Notes
+      # NB Site, Obs and Hor notes all live in the one table but can be
+      # keyed out easily by note_type
+      # CFD notes are excluded as they contain names/phone numbers/addresses
+      "NOT" = 
+        dbGetQuery(SALI,
+         paste0(temp1, 
+                "select * from temp1
+                 inner join sit_notes using (project_code)
+                 where note_type != 'CFD'
+                 order by project_code, site_id")),
+      # 7 - Observations
       "OBS" = 
         dbGetQuery(SALI,
           paste0(temp1, 
             "select * from temp1
              inner join sit_observations using (project_code)
              order by project_code, site_id, obs_no")),
-      # LEVEL 3 - within-observations
-      "CLA" = 
-        dbGetQuery(SALI,
-          paste0(temp1, 
-            "select * from temp1
-             inner join sit_soil_classifications using (project_code)
-             order by project_code, site_id, obs_no, soil_class_no")), 
-      "DIS" = 
-        dbGetQuery(SALI,
-          paste0(temp1, 
-                 "select * from temp1
-                  inner join sit_disturbances using (project_code)
-                  order by project_code, site_id, obs_no, disturb_no")),
-      "ERO" = 
-        dbGetQuery(SALI,
-          paste0(temp1, 
-                 "select * from temp1
-                  inner join sit_erosions using (project_code)
-                  order by project_code, site_id, obs_no, ero_no")),        
-      "HOR" = 
-        dbGetQuery(SALI,
-          paste0(temp1, 
-            "select hor.*, (texture_code || texture_qualifier) as texture 
-             from temp1
-             inner join sit_horizons hor 
-               on temp1.project_code = hor.project_code
-             order by hor.project_code, site_id, obs_no, horizon_no")),
+      # 8 Locations
       # grabbing all but SHAPE col below, ROracle can't handle SDO_GEOM :'(
-      "LOC" = 
+      # also only grabbing coordinates in GDA94 (EPSG:4283). Some of these are
+      # converted in the system, having originally been recorded in AGD84 or 
+      # AGD66 datums, often in projected systems (commonly UTM zone 55S or 56S)
+      "OLC" = 
         dbGetQuery(SALI,
           paste0(temp1, 
             "select project_code, site_id, obs_no, datum, derived_location,
@@ -114,135 +170,79 @@ if(file.exists(sit_datafile)) {
              from temp1
              inner join sit_locations using (project_code)
              where datum = 3
-             and longitude > 1
+             and longitude > 1 and longitude is not null  /* >:-( */
              order by project_code, site_id, obs_no")),
-      "MIC" = 
+      # 9 Soil Classifications
+      "OCL" = 
+        dbGetQuery(SALI,
+          paste0(temp1, 
+            "select * from temp1
+             inner join sit_soil_classifications using (project_code)
+             order by project_code, site_id, obs_no, soil_class_no")), 
+      # 10 Disturbances
+      "ODS" = 
+        dbGetQuery(SALI,
+          paste0(temp1, 
+                 "select * from temp1
+                  inner join sit_disturbances using (project_code)
+                  order by project_code, site_id, obs_no, disturb_no")),
+      # 11 surface conditions
+      "OSC" = 
+        dbGetQuery(SALI,
+          paste0(temp1,
+                 "select * from temp1
+                  inner join sit_surf_conditions using (project_code)
+                  order by project_code, site_id, obs_no, surf_cond_no")),
+      # 12 Microrelief
+      "OMC" = 
         dbGetQuery(SALI,
           paste0(temp1,
                  "select * from temp1
                   inner join sit_microreliefs using (project_code)
                   order by project_code, site_id, obs_no, micro_no")),
+      # 13 Erosion
+      "OER" = 
+        dbGetQuery(SALI,
+          paste0(temp1, 
+                 "select * from temp1
+                  inner join sit_erosions using (project_code)
+                  order by project_code, site_id, obs_no, ero_no")),
+      # 14 Surface Coarse Frags
+      "OCF" =
+        dbGetQuery(SALI,
+          paste0(temp1,
+                 "select * from temp1
+                  inner join sit_surf_coarse_frags using (project_code)
+                  order by project_code, site_id, obs_no, surf_frag_no")),
+      # 15 Outcrop
       "OTC" = 
         dbGetQuery(SALI,
           paste0(temp1, 
                  "select * from temp1
                   inner join sit_rock_outcrops using (project_code)
                   order by project_code, site_id, obs_no, outcrop_no")),
-      "SAM" = # note not keying on horizon on purpose!
+      # 16 substrate mineral composition
+      "OSM" = 
         dbGetQuery(SALI,
-          paste0(temp1,
+          paste0(temp1, 
                  "select * from temp1
-                  inner join sit_samples using (project_code)
-                  order by project_code, site_id, obs_no, sample_no")),
-      "SCF" =
+                  inner join sit_sub_mineral_comps using (project_code)
+                  order by project_code, site_id, obs_no, sub_min_no")),
+      # 17 Vegetation communities
+      "VCM" = 
         dbGetQuery(SALI,
-          paste0(temp1,
+          paste0(temp1, 
                  "select * from temp1
-                  inner join sit_surf_coarse_frags using (project_code)
-                  order by project_code, site_id, obs_no, surf_frag_no")),
-      "SCN" = 
-        dbGetQuery(SALI,
-          paste0(temp1,
-                 "select * from temp1
-                  inner join sit_surf_conditions using (project_code)
-                  order by project_code, site_id, obs_no, surf_cond_no")),
+                  inner join sit_veg_communities using (project_code)
+                  order by project_code, site_id, obs_no, veg_comm_no")),
+      # 18 Veg strata
       "VST" =
         dbGetQuery(SALI,
           paste0(temp1,
                  "select * from temp1
                   inner join sit_veg_strata using (project_code)
                   order by project_code, site_id, obs_no, veg_comm_no")),
-      # LEVEL 4 - within-horizon, and within-veg-strata
-      "CFS" = 
-        dbGetQuery(SALI,
-         paste0(temp1, 
-                "select * from temp1
-                inner join sit_coarse_frags using (project_code)
-                order by project_code, site_id, obs_no, horizon_no,
-                  coarse_frag_no")),
-      "COL" = 
-        dbGetQuery(SALI,
-          paste0(temp1, 
-                 "select * from temp1
-                  inner join sit_horizon_colours using (project_code)
-                  order by project_code, site_id, obs_no, horizon_no, 
-                    hor_col_no")),
-      "CRK" = 
-        dbGetQuery(SALI,
-          paste0(temp1, 
-                 "select * from temp1
-                  inner join sit_cracks using (project_code)
-                  order by project_code, site_id, obs_no, horizon_no, 
-                    crack_no")),
-      "CUT" = 
-        dbGetQuery(SALI,
-          paste0(temp1, 
-                 "select * from temp1
-                  inner join sit_cutans using (project_code)
-                  order by project_code, site_id, obs_no, horizon_no, 
-                    cutan_no")),
-      "FAB" = 
-        dbGetQuery(SALI,
-          paste0(temp1, 
-                 "select * from temp1
-                  inner join sit_fabrics using (project_code)
-                  order by project_code, site_id, obs_no, horizon_no, 
-                    fab_no")),   
-      "HSF" = 
-        dbGetQuery(SALI,
-          paste0(temp1, 
-                 "select * from temp1
-                  inner join sit_horizon_suffices using (project_code)
-                  order by project_code, site_id, obs_no, horizon_no")),         
-      "MOT" = 
-        dbGetQuery(SALI,
-          paste0(temp1, 
-                 "select * from temp1
-                  inner join sit_mottles using (project_code)
-                  order by project_code, site_id, obs_no, horizon_no, 
-                    mott_no")),
-      "PAN" =
-        dbGetQuery(SALI,
-            paste0(temp1, 
-                   "select * from temp1
-                    inner join sit_pans using (project_code)
-                    order by project_code, site_id, obs_no, horizon_no, 
-                      pan_no")),
-      "POR" = 
-        dbGetQuery(SALI,
-            paste0(temp1, 
-                   "select * from temp1
-                    inner join sit_macropores using (project_code)
-                    order by project_code, site_id, obs_no, horizon_no, 
-                      macro_no")),     
-      "RTS" =
-        dbGetQuery(SALI,
-            paste0(temp1, 
-                   "select * from temp1
-                    inner join sit_roots using (project_code)
-                    order by project_code, site_id, obs_no, horizon_no, 
-                      root_no")),
-      "SEG" =
-        dbGetQuery(SALI,
-            paste0(temp1, 
-                   "select * from temp1
-                    inner join sit_segregations using (project_code)
-                    order by project_code, site_id, obs_no, horizon_no, 
-                      seg_no")),
-      "STG" =
-        dbGetQuery(SALI,
-            paste0(temp1, 
-                   "select * from temp1
-                    inner join sit_strengths using (project_code)
-                    order by project_code, site_id, obs_no, horizon_no, 
-                      stren_no")),
-      "STR" = 
-        dbGetQuery(SALI,
-            paste0(temp1, 
-                   "select * from temp1
-                    inner join sit_structures using (project_code)
-                    order by project_code, site_id, obs_no, horizon_no, 
-                      struct_no")),
+      # 19 veg spp
       "VSP" = 
         dbGetQuery(SALI,
             paste0(temp1, 
@@ -250,76 +250,171 @@ if(file.exists(sit_datafile)) {
                     inner join sit_veg_strata_species using (project_code)
                     order by project_code, site_id, obs_no, veg_comm_no, 
                       veg_strata_spec_no")), 
-      # Field tests are pulled out by type here for simplicity: pH, EC, 
-      # dispersion, slaking, fine earth effervescence, pH of hydrogen peroxide
-      # extract (nb: acid sulfate specific)
-      "FT_PH" =
+      # 20 soil horizons
+      "HOR" = 
+        dbGetQuery(SALI,
+          paste0(temp1, 
+            "select hor.*, (texture_code || texture_qualifier) as texture 
+             from temp1
+             inner join sit_horizons hor 
+               on temp1.project_code = hor.project_code
+             order by hor.project_code, site_id, obs_no, horizon_no")),
+      # 21 horizon suffices
+      "HSX" = 
+        dbGetQuery(SALI,
+          paste0(temp1,
+                 "select * from temp1
+                  inner join sit_horizon_suffices using (project_code)
+                  order by project_code, site_id, obs_no, horizon_no")),
+      # 22 Horizon colours
+      "HCO" = 
         dbGetQuery(SALI,
           paste0(temp1, 
                  "select * from temp1
-                  inner join 
-                    (select * from sit_field_tests where test_type = 'PH') ftph
-                      using (project_code)
+                  inner join sit_horizon_colours using (project_code)
+                  order by project_code, site_id, obs_no, horizon_no, 
+                    hor_col_no")),
+      # 23 mottles
+      "HMT" = 
+        dbGetQuery(SALI,
+          paste0(temp1, 
+                 "select * from temp1
+                  inner join sit_mottles using (project_code)
+                  order by project_code, site_id, obs_no, horizon_no, 
+                    mott_no")),
+      # 24 coarse frags
+      "HCF" = 
+        dbGetQuery(SALI,
+         paste0(temp1, 
+                "select * from temp1
+                inner join sit_coarse_frags using (project_code)
+                order by project_code, site_id, obs_no, horizon_no,
+                  coarse_frag_no")),
+      # 25 Stuctures
+      "HST" = 
+        dbGetQuery(SALI,
+            paste0(temp1, 
+                   "select * from temp1
+                    inner join sit_structures using (project_code)
+                    order by project_code, site_id, obs_no, horizon_no, 
+                      struct_no")),    
+      # 26 Segregations
+      "HSG" =
+        dbGetQuery(SALI,
+            paste0(temp1, 
+                   "select * from temp1
+                    inner join sit_segregations using (project_code)
+                    order by project_code, site_id, obs_no, horizon_no, 
+                      seg_no")), 
+      # 27 Fabrics
+      "HFB" = 
+        dbGetQuery(SALI,
+          paste0(temp1, 
+                 "select * from temp1
+                  inner join sit_fabrics using (project_code)
+                  order by project_code, site_id, obs_no, horizon_no, 
+                    fab_no")),  
+      # 28 Cutans
+      "HCU" = 
+        dbGetQuery(SALI,
+          paste0(temp1, 
+                 "select * from temp1
+                  inner join sit_cutans using (project_code)
+                  order by project_code, site_id, obs_no, horizon_no, 
+                    cutan_no")),      
+      # 29 Cracks
+      "HCR" = 
+        dbGetQuery(SALI,
+          paste0(temp1, 
+                 "select * from temp1
+                  inner join sit_cracks using (project_code)
+                  order by project_code, site_id, obs_no, horizon_no, 
+                    crack_no")),
+      # 30 Macropores
+      "HMP" = 
+        dbGetQuery(SALI,
+            paste0(temp1, 
+                   "select * from temp1
+                    inner join sit_macropores using (project_code)
+                    order by project_code, site_id, obs_no, horizon_no, 
+                      macro_no")),  
+      # 31 Strengths
+      "HGT" =
+        dbGetQuery(SALI,
+            paste0(temp1, 
+                   "select * from temp1
+                    inner join sit_strengths using (project_code)
+                    order by project_code, site_id, obs_no, horizon_no, 
+                      stren_no")),
+      # 32 Pans
+      "HPA" =
+        dbGetQuery(SALI,
+            paste0(temp1, 
+                   "select * from temp1
+                    inner join sit_pans using (project_code)
+                    order by project_code, site_id, obs_no, horizon_no, 
+                      pan_no")),  
+      # 33 Roots
+      "HRT" =
+        dbGetQuery(SALI,
+            paste0(temp1, 
+                   "select * from temp1
+                    inner join sit_roots using (project_code)
+                    order by project_code, site_id, obs_no, horizon_no, 
+                      root_no")),   
+      # 34 Field tests
+      "FTS" = 
+         dbGetQuery(SALI,
+          paste0(temp1, 
+                 "select * from temp1
+                  inner join sit_field_tests using (project_code)
                   order by project_code, site_id, obs_no, horizon_no, 
                     test_no")),
-      "FT_EC" =
+      # 35 Samples
+      # note - can join with keys including horizon but don't have to
+      "SAM" = 
         dbGetQuery(SALI,
-          paste0(temp1, 
+          paste0(temp1,
                  "select * from temp1
-                  inner join 
-                    (select * from sit_field_tests where test_type = 'EC') ftec
-                      using (project_code)
-                  order by project_code, site_id, obs_no, horizon_no, 
-                    test_no")), 
-      "FT_DS" =
-        dbGetQuery(SALI,
-          paste0(temp1, 
-                 "select * from temp1
-                  inner join 
-                    (select * from sit_field_tests where test_type = 'DISP') ftd
-                      using (project_code)
-                  order by project_code, site_id, obs_no, horizon_no, 
-                    test_no")), 
-      "FT_SL" = 
-        dbGetQuery(SALI,
-          paste0(temp1, 
-                 "select * from temp1
-                  inner join 
-                    (select * from sit_field_tests where test_type = 'SLAK') fts
-                      using (project_code)
-                  order by project_code, site_id, obs_no, horizon_no, 
-                    test_no")),   
-      "FT_H2" = 
-        dbGetQuery(SALI,
-          paste0(temp1, 
-                 "select * from temp1
-                  inner join 
-                    (select * from sit_field_tests where test_type = 'H2O2') fth
-                      using (project_code)
-                  order by project_code, site_id, obs_no, horizon_no, 
-                    test_no")), 
-      "FT_FZ" = 
-        dbGetQuery(SALI,
-          paste0(temp1, 
-                 "select * from temp1
-                  inner join 
-                    (select * from sit_field_tests where test_type = 'CAREF') fc
-                      using (project_code)
-                  order by project_code, site_id, obs_no, horizon_no, 
-                    test_no"))
+                  inner join sit_samples using (project_code)
+                  order by project_code, site_id, obs_no, sample_no"))
+      # 36 lab results 
+      # see API at https://soil-chem.information.qld.gov.au/
       )
   saveRDS(sit_data, sit_datafile)
 }
 
 ```
 
-Note: Not sure when/if decodes needed, table (hah!) for now.
-
-Note2: Might be worth dropping the created/updated fields to save space??? 'bout 450MB atm
-
 ***
 
-Get decodes into another list
+### Decode Tables
+
+Decodes for short code lists are all in one large table called SALI_REF_CODES, grouped by field RV_DOMAIN
+
+Longer code lists e.g. geology, landform elements are in their own tables
+
+1 SALI_REF_CODES (used all over)
+2 SIT_ELEM_TYPES 
+3 SIT_PATT_TYPES 
+4 SIT_GEOLOGIES  
+5 SIT_LAND_USES 
+6 SIT_LITHOLOGIES 
+7 SIT_MASS_GEN_TYPES
+8 SIT_ASCS
+9 SIT_PPFS
+10 SIT_GSGS
+11 SIT_EROSION_TYPES
+12 SIT_EROSION_DEGREES
+13 SIT_VEG_SPECIES
+14 SIT_STRUCT_FORMS
+15 SIT_TEXTURES
+16 SIT_COLOURS
+17 SIT_COLOUR_CONVERT
+18 SIT_FACIES
+19 SIT_FIELD_TEST_TYPES
+20 SIT_FIELD_TEST_TYPE_SPECS
+21 SIT_NOTE_TYPES
 
 ```{r getdecodes}
 decode_datafile <- file.path(getwd(), 'SALI_DATA', 
@@ -337,24 +432,114 @@ if(file.exists(decode_datafile)) {
                    "select * from sali_ref_codes
                     order by rv_domain, rv_low_value"
         ) ,
-      # the others are large enough to have their own tables
-      "COL" = dbGetQuery(SALI, "select * from sit_colours"),
-      "CLV" = dbGetQuery(SALI, "select * from sit_colour_convert"),
       "ELE" = dbGetQuery(SALI, "select * from sit_elem_types"),
-      "ERD" = dbGetQuery(SALI, "select * from sit_erosion_degrees"),
-      "ERT" = dbGetQuery(SALI, "select * from sit_erosion_types"),
-      "FTT" = dbGetQuery(SALI, "select * from sit_field_test_types"),
-      "GSG" = dbGetQuery(SALI, "select * from sit_gsgs"),
+      "PAT" = dbGetQuery(SALI, "select * from sit_patt_types"),
+      "GEO" = dbGetQuery(SALI, "select * from sit_geologies"),
       "LUS" = dbGetQuery(SALI, "select * from sit_land_uses"),
       "LTH" = dbGetQuery(SALI, "select * from sit_lithologies"), 
-      "PAT" = dbGetQuery(SALI, "select * from sit_patt_types"),
-      "TEX" = dbGetQuery(SALI, "select * from sit_textures")
+      "MGT" = dbGetQuery(SALI, "select * from sit_mass_gen_types"), 
+      "ASC" = dbGetQuery(SALI, "select * from sit_ascs"),
+      "PPF" = dbGetQuery(SALI, "select * from sit_ppfs"),
+      "GSG" = dbGetQuery(SALI, "select * from sit_gsgs"),
+      "ERT" = dbGetQuery(SALI, "select * from sit_erosion_types"),      
+      "ERD" = dbGetQuery(SALI, "select * from sit_erosion_degrees"),
+      "VSS" = dbGetQuery(SALI, "select * from sit_veg_species"),
+      "VST" = dbGetQuery(SALI, "select * from sit_struct_forms"),
+      "TEX" = dbGetQuery(SALI, "select * from sit_textures"),
+      "COL" = dbGetQuery(SALI, "select * from sit_colours"),
+      "CLV" = dbGetQuery(SALI, "select * from sit_colour_convert"),
+      "FAC" = dbGetQuery(SALI, "select * from sit_facies"),
+      "FTT" = dbGetQuery(SALI, "select * from sit_field_test_types"),
+      "FTS" = dbGetQuery(SALI, "select * from sit_field_test_type_specs"),
+      "NTP" = dbGetQuery(SALI, "select * from sit_note_types"), 
     )
   saveRDS(decodes, decode_datafile)
 }
       
-      
+```
 
+### Make a multilayer geopackage
 
+Because why not?
+
+```{r biggp}
+# make locations spatial
+SIT_LOCATIONS <- st_as_sf(sit_data[['OLC']],
+                          coords = c('LONGITUDE', 'LATITUDE'),
+                          crs = 4283, remove = FALSE,
+                          dim = 'XY')
+
+# write locations to gpkg
+st_write(SIT_LOCATIONS, 
+         file.path(getwd(), 'SALI_DATA',
+                   paste0('SALI_SITES_', format(Sys.Date(), '%Y%m%d'), '.gpkg')),
+         layer = 'SIT_LOCATIONS',
+         driver = 'GPKG', delete_dsn = TRUE)
+
+# pop locations from main list and rename
+sit_data[['OLC']] <- NULL
+
+table_names <- c('SIT_SITES', 'SIT_SITE_LAND_USES', 'SIT_SITE_MAN_PRACS',
+                 'SIT_ELEM_GEOMORPHS', 'SIT_PATT_GEOMORPHS', 'SIT_NOTES', 
+                 'SIT_OBSERVATIONS', 'SIT_SOIL_CLASSIFICATIONS',
+                 'SIT_DISTURBANCES', 'SIT_SURFACE_CONDITIONS', 'SIT_MICRORELIEFS', 
+                 'SIT_EROSIONS',  'SIT_SURF_COARSE_FRAGS', 'SIT_ROCK_OUTCROPS', 
+                 'SIT_SUB_MINERAL_COMPS', 'SIT_VEG_COMMUNITIES', 'SIT_VEG_STRATA', 
+                 'SIT_VEG_STRATA_SPECIES', 'SIT_HORIZONS', 'SIT_HORIZON_SUFFICES', 
+                 'SIT_HORIZON_COLOURS', 'SIT_MOTTLES', 'SIT_COARSE_FRAGS', 
+                 'SIT_STRUCTURES', 'SIT_SEGREGATIONS', 'SIT_FABRICS', 'SIT_CUTANS',
+                 'SIT_CRACKS', 'SIT_MACROPORES', 'SIT_STRENGTHS', 'SIT_PANS', 
+                 'SIT_ROOTS', 'SIT_FIELD_TESTS', 'SIT_SAMPLES')
+names(sit_data) <- table_names
+
+# do the same for decode tables - note name change, should make the tables
+# easier to work with. I always struggle to remember which tables 
+# actually hold data vs decodes...
+decode_names <- c('REF_CODES', 'REF_ELEM_TYPES', 'REF_PATT_TYPES', 
+                  'REF_GEOLOGIES', 'REF_LAND_USES', 'REF_LITHOLOGIES', 
+                  'REF_MASS_GEN_TYPES', 'REF_ASCS', 'REF_PPFS', 'REF_GSGS', 
+                  'REF_EROSION_TYPES', 'REF_EROSION_DEGREES', 'REF_VEG_SPECIES', 
+                  'REF_STRUCT_FORMS', 'REF_TEXTURES', 'REF_COLOURS', 
+                  'REF_COLOUR_CONVERT', 'REF_FACIES', 'REF_FIELD_TEST_TYPES', 
+                  'REF_FIELD_TEST_TYPE_SPECS')
+names(decodes) <- decode_names
+
+# add to gpkg
+con <- dbConnect(SQLite(), 
+                 dbname = file.path(getwd(),'SALI_DATA',
+                                    paste0('SALI_SITES_',
+                                           format(Sys.Date(), '%Y%m%d'),
+                                           '.gpkg'))
+                 )
+purrr::map2(sit_data, table_names, function(lyr, nm) { dbWriteTable(con, nm, lyr) })
+purrr::map2(decodes, decode_names, function(lyr, nm) { dbWriteTable(con, nm, lyr) })
+dbDisconnect(con)
+  
+# about 300MB on disk so not v practical?
+# Need to use Virtual Layer in QGIS (and whatever the Arc equiv is... make Query
+# Layer??) to join tables
+# easier to work with in R/Py, likely
+```
+
+```{r plotdemo, echo = FALSE, results = 'hold'}
+
+sph_bab <- dplyr::filter(sit_data[['SIT_FIELD_TESTS']], PROJECT_CODE == 'BAB' &
+                         TEST_TYPE == 'PH' & OBS_NO == 1 & 
+                           HORIZON_NO  == 1 & TEST_NO == 1) %>% 
+  left_join(., SIT_LOCATIONS, by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO')) %>% 
+  mutate(VALUE = as.numeric(VALUE),
+         VALUE = factor(VALUE, levels = sort(unique(VALUE)), ordered = TRUE)) %>% 
+  st_as_sf(crs = 4283)
+
+phpal <- colorRampPalette(scales::brewer_pal('div', 'RdBu')(14))
+
+ggplot() +
+  geom_sf(data = sph_bab, aes(col = VALUE), pch = 16, show.legend = 'point') +
+  scale_colour_manual(values = phpal(14)) +
+  labs(col = 'pH') +
+  ggtitle('Bundaberg 1:50,000 soil sites', subtitle = 'Surface Raupach pH') +
+  theme_minimal()
 
 ```
+
+***

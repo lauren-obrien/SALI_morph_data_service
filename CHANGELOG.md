@@ -1,3 +1,10 @@
+20191026
+
+  * rejig extract to grab the lot
+  * experiment with making a multilayer gpkg
+  * finish simple layering design
+  * try something a bit more complex
+
 20191019
 
   * Add concatenated texture column to horizon data extract, since concatenating
