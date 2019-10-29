@@ -1,5 +1,5 @@
 ---
-title: "TERN - morphology data for SLGA II - PLAN B"
+title: "Morphology WFS - Option 3"
 output: html_document
 author: "Lauren O'Brien"
 date: `r Sys.Date()`
@@ -12,6 +12,10 @@ knitr::opts_chunk$set(echo = FALSE, results = 'hold', fig.height = 6,
                       fig.align = 'center', warning = FALSE, message = FALSE,
                       eval = FALSE)
 ```
+
+### Background
+
+Experiments with extracting and formatting soils morphology data in a form useful for TERN SLGA II modelling. Outputs will be published as a Web Feature Service. Potential for further development into a regular soils data service.
 
 ```{r pkgs, results = 'hide'}
 options(stringsAsFactors = FALSE, scipen = 999)
