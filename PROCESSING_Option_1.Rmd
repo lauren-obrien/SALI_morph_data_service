@@ -1,0 +1,119 @@
+---
+title: "Morphology WFS - Option 1"
+output: html_document
+author: "Lauren O'Brien"
+date: `r Sys.Date()`
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, results = 'hold', fig.height = 6,
+                      fig.align = 'center', warning = FALSE, message = FALSE,
+                      eval = FALSE)
+```
+
+### Background
+
+Experiments with extracting and formatting soils morphology data in a form useful for TERN SLGA II modelling. Outputs will be published as a Web Feature Service. Potential for further development into a regular soils data service.
+
+```{r pkgs, results = 'hide'}
+options(stringsAsFactors = FALSE, scipen = 999)
+library(sf)            # vector data IO and processing
+library(units)         # for working with unit-attributed data
+library(tidyverse)     # general data manipulation and display
+```
+
+### 'Simple' conversion
+
+The simplest way to turn the morph data into a service (from a maintainer's perspective) is just to keep the existing layer structure and spatialise each table. 
+
+```{r datammmmm}
+today <- '20191028' 
+sit_datafile <- file.path(getwd(), 'SALI_DATA', 
+                          paste0('SALI_SIT-data_', today, '.rds'))
+
+sit_data <- readRDS(sit_datafile)
+
+```
+
+Pros:
+
+  * layer structure is familiar to existing SALI users
+  * simple to extract and process data
+  * simple to write metadata
+  * minimises no-data cells in output layers
+  
+Cons: 
+
+  * WFS doesn't easily support cross-layer querying - joining tables must be done client-side
+  * geometry repeats a lot - inefficient?
+  * Site-level data doesn't have a point location. Options:
+      * Create multipoint geometry from all observations on a site
+      * Create polygon from bounding box or convex hull of observations
+      * Use the location of observation one
+
+Given that about 99.5% of sites have only one observation, the location of Observation 1 is used below to assign location to site-level data.
+
+```{r spatall}
+spat_data <- sit_data
+ 
+locs <- spat_data[['OLC']] %>% 
+  st_as_sf(coords = c('LONGITUDE', 'LATITUDE'), crs = 4283) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO)
+
+locs_o1 <- dplyr::filter(locs, OBS_NO == 1) %>% dplyr::select(-OBS_NO)
+
+spat_data[['OLC']] <- NULL # will be redundant
+
+spat_data[1:5] <- 
+  lapply(spat_data[1:5], function(lyr) {
+    right_join(locs_o1, lyr, by = c('PROJECT_CODE', 'SITE_ID')) %>% 
+      dplyr::select(-CREATED_BY, -LAST_UPDATED_BY)
+    })
+
+spat_data[6:length(spat_data)] <- 
+  lapply(spat_data[6:length(spat_data)], function(lyr) {
+    right_join(locs, lyr, by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO')) %>% 
+      dplyr::select(-CREATED_BY, -LAST_UPDATED_BY)
+    })
+
+saveRDS(spat_data, file.path(getwd(), 'DERIVED_DATA', 'SALI_Morph_spatial.rds'))
+```
+
+All that geometry doubles the file size, yikes.
+
+### Output
+
+Writing to FGDB for use in Arc:
+
+```{r create_gdb}
+test_gdb <- file.path(getwd(), 'DERIVED_DATA', 'TEST_01_SIMPLE.gdb')
+
+if(!(dir.exists(test_gdb))) {
+  # launch access to arcpy
+  library(reticulate)
+  arcpy3_dir <- 'C:/Program Files/ArcGIS/Pro/bin/Python'
+  system2(file.path(arcpy3_dir, 'Scripts', 'proenv.bat'))
+  # make an empty file geodatabase
+  arcpy <- import('arcpy')
+  arcpy$CreateFileGDB_management(file.path(getwd(), 'DERIVED_DATA'), 
+                                 'TEST_01_SIMPLE.gdb')
+  system2(file.path(arcpy3_dir, 'Scripts', 'deactivate.bat'))
+}
+
+```
+
+```{r write_gdb}
+library(arcgisbinding)
+arc.check_product()
+
+names(spat_data)[which(names(spat_data) == 'NOT')] <- 'NOTES' # reserved term whoops
+
+purrr::map2(spat_data, names(spat_data), function(lyr, nm) {
+  arc.write(file.path(test_gdb, nm), lyr, overwrite = TRUE)
+})
+
+```
+
+
