@@ -1,0 +1,92 @@
+---
+title: "HELPER - Munsell Colours to Hex values"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, results = 'hold', fig.height = 6,
+                      fig.align = 'center', warning = FALSE, message = FALSE,
+                      eval = TRUE)
+```
+
+Munsell soil colour notations need web-friendly hex equivalents for devs and cartos
+
+```{r pkgs, results = 'hide'}
+options(stringsAsFactors = FALSE, scipen = 999)
+library(sf)              # vector data IO and processing
+library(DBI)             # database interface
+library(ROracle)         # Oracle database drivers
+library(getPass)         # password management
+library(units)           # for working with unit-attributed data
+library(tidyverse)       # general data manipulation and display
+library(munsellinterpol) # munsell translation
+
+Sys.setenv(
+  'TNS_ADMIN'   = file.path('C:', 'Users', Sys.getenv('USERNAME'), 'Oracle'),
+  'ORACLE_HOME' = 'C:/Program Files/Oracle Instant Client'
+  )
+SALI <- dbConnect(dbDriver('Oracle'),
+                  username = 'obrienle',
+                  password = getPass(),
+                  dbname   = 'sispda',
+                  host     = 'ex02client01',
+                  port     = 1521)
+
+rgb2hex <- function(r,g,b) rgb(r, g, b, maxColorValue = 255)
+```
+
+Some existing hex values are held in SALI:
+
+```{r getcols}
+
+scc <- dbGetQuery(SALI, "Select * from sit_colour_convert")
+
+head(scc)
+
+```
+
+but some of the codes are wonky - they're too short. A lot of those don't seem to actually be in use, as there are no corresponding entries in the sit_colours decode table, so eh.
+
+To just get fresh hex colours for the munsell codes used in sit_horizon_colours and sit_mottles,
+
+```{r longway}
+today <- '20191028' 
+sit_datafile <- file.path(getwd(), 'SALI_DATA', 
+                          paste0('SALI_SIT-data_', today, '.rds'))
+dec_datafile <- file.path(getwd(), 'SALI_DATA', 
+                          paste0('SALI_SIT-data_decodes_', today, '.rds'))
+
+sit_data <- readRDS(sit_datafile)
+decodes <- readRDS(dec_datafile)
+
+hor_cols <- sit_data[['HCO']] %>% 
+  dplyr::select(COLOUR_BOOK, COLOUR_CODE) %>% 
+  distinct() 
+
+mott_cols <- sit_data[['HMT']] %>% 
+  dplyr::filter(COLOUR_BOOK != 'Y') %>% 
+  dplyr::select(COLOUR_BOOK, COLOUR_CODE) %>% 
+  distinct()
+
+all_cols <- rbind(hor_cols, mott_cols) %>% 
+  distinct() %>% 
+  left_join(., decodes[['COL']], by = c('COLOUR_BOOK', 'COLOUR_CODE')) %>% 
+  dplyr::select(COLOUR_BOOK, COLOUR_CODE, HUE, VALUE, CHROMA) %>% 
+  mutate(COL_FORMATTED = paste0(HUE, ' ', VALUE, '/', CHROMA)) %>% 
+  filter(!is.na(COLOUR_CODE))
+
+all_cols_translated <- lapply(all_cols$COL_FORMATTED, MunsellToRGB) %>% 
+  map_dfr(., function(x) {
+    data.frame("COLOURCODE" = x$SAMPLE_NAME,
+               "R" = round(x$RGB[1]),
+               "G" = round(x$RGB[2]),
+               "B" = round(x$RGB[3])
+               ) 
+  }) %>% 
+  mutate(HEX = rgb2hex(R,G,B)) %>% 
+  cbind(all_cols, .) %>% 
+  select(-COL_FORMATTED, -COLOURCODE) %>% 
+  arrange(desc(COLOUR_BOOK), COLOUR_CODE)
+
+write_csv(all_cols_translated, 
+          file.path(getwd(), 'helpers', 'translated_colours.csv'))
+```
