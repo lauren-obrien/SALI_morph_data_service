@@ -2,7 +2,7 @@
 title: "Morphology WFS - Option 1"
 output: html_document
 author: "Lauren O'Brien"
-date: `r Sys.Date()`
+date: "`r Sys.Date()`"
 editor_options: 
   chunk_output_type: console
 ---
@@ -13,9 +13,9 @@ knitr::opts_chunk$set(echo = FALSE, results = 'hold', fig.height = 6,
                       eval = FALSE)
 ```
 
-### Background
+## Background
 
-Experiments with extracting and formatting soils morphology data in a form useful for TERN SLGA II modelling. Outputs will be published as a Web Feature Service. Potential for further development into a regular soils data service.
+Experiments with extracting and formatting Queensland soils morphology data for WFS publication. Primary driver is the TERN SGLA II modelling (and particularly interface with the soil data federator https://github.com/RossDSearle/SoilDataFederatoR/) but the service should be useful to a wider range of clients as well.
 
 ```{r pkgs, results = 'hide'}
 options(stringsAsFactors = FALSE, scipen = 999)
@@ -26,15 +26,13 @@ library(tidyverse)     # general data manipulation and display
 
 ### 'Simple' conversion
 
-The simplest way to turn the morph data into a service (from a maintainer's perspective) is just to keep the existing layer structure and spatialise each table. 
+The simplest way to turn the morphology data into a service (from a maintainer's perspective, atl east) is just to keep the existing layer structure from the SALI database, and spatialise each table. 
 
 ```{r datammmmm}
 today <- '20191028' 
 sit_datafile <- file.path(getwd(), 'SALI_DATA', 
                           paste0('SALI_SIT-data_', today, '.rds'))
-
 sit_data <- readRDS(sit_datafile)
-
 ```
 
 Pros:
@@ -79,15 +77,18 @@ spat_data[6:length(spat_data)] <-
     })
 
 saveRDS(spat_data, file.path(getwd(), 'DERIVED_DATA', 'SALI_Morph_spatial.rds'))
+# spat_data <- readRDS(file.path(getwd(), 'DERIVED_DATA', 'SALI_Morph_spatial.rds'))
 ```
 
 All that geometry doubles the file size, yikes.
 
 ### Output
 
-Writing to FGDB for use in Arc:
+Writing to File GDB for use in Arc:
 
-```{r create_gdb}
+Note that using `reticulate` and `arcgisbridge` in the same session appears impossible at present; one locks up the software license and precents the next from working :|
+
+```{r create_gdb, eval =FALSE}
 test_gdb <- file.path(getwd(), 'DERIVED_DATA', 'TEST_01_SIMPLE.gdb')
 
 if(!(dir.exists(test_gdb))) {
@@ -104,11 +105,12 @@ if(!(dir.exists(test_gdb))) {
 
 ```
 
-```{r write_gdb}
+```{r write_gdb, eval = FALSE}
 library(arcgisbinding)
 arc.check_product()
 
-names(spat_data)[which(names(spat_data) == 'NOT')] <- 'NOTES' # reserved term whoops
+# reserved term whoops
+names(spat_data)[which(names(spat_data) == 'NOT')] <- 'NOTES'
 
 purrr::map2(spat_data, names(spat_data), function(lyr, nm) {
   arc.write(file.path(test_gdb, nm), lyr, overwrite = TRUE)
@@ -116,4 +118,4 @@ purrr::map2(spat_data, names(spat_data), function(lyr, nm) {
 
 ```
 
-
+***
