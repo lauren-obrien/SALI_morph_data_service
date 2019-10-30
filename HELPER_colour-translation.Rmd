@@ -8,45 +8,17 @@ knitr::opts_chunk$set(echo = TRUE, results = 'hold', fig.height = 6,
                       eval = TRUE)
 ```
 
-Munsell soil colour notations need web-friendly hex equivalents for devs and cartos
+Munsell soil colour notations need web-friendly hex equivalents for devs and cartos.
 
 ```{r pkgs, results = 'hide'}
 options(stringsAsFactors = FALSE, scipen = 999)
-library(sf)              # vector data IO and processing
-library(DBI)             # database interface
-library(ROracle)         # Oracle database drivers
-library(getPass)         # password management
-library(units)           # for working with unit-attributed data
 library(tidyverse)       # general data manipulation and display
 library(munsellinterpol) # munsell translation
-
-Sys.setenv(
-  'TNS_ADMIN'   = file.path('C:', 'Users', Sys.getenv('USERNAME'), 'Oracle'),
-  'ORACLE_HOME' = 'C:/Program Files/Oracle Instant Client'
-  )
-SALI <- dbConnect(dbDriver('Oracle'),
-                  username = 'obrienle',
-                  password = getPass(),
-                  dbname   = 'sispda',
-                  host     = 'ex02client01',
-                  port     = 1521)
 
 rgb2hex <- function(r,g,b) rgb(r, g, b, maxColorValue = 255)
 ```
 
-Some existing hex values are held in SALI:
-
-```{r getcols}
-
-scc <- dbGetQuery(SALI, "Select * from sit_colour_convert")
-
-head(scc)
-
-```
-
-but some of the codes are wonky - they're too short. A lot of those don't seem to actually be in use, as there are no corresponding entries in the sit_colours decode table, so eh.
-
-To just get fresh hex colours for the munsell codes used in sit_horizon_colours and sit_mottles,
+To generate hex colours for the munsell codes used in sit_horizon_colours and sit_mottles,
 
 ```{r longway}
 today <- '20191028' 
@@ -90,3 +62,17 @@ all_cols_translated <- lapply(all_cols$COL_FORMATTED, MunsellToRGB) %>%
 write_csv(all_cols_translated, 
           file.path(getwd(), 'helpers', 'translated_colours.csv'))
 ```
+
+A minority of mottles are described with reference to Munsell codes - most are described using the simpler Yellow Book colours. May as well supply a hex value here too, with reference to common values seen in the field. Nominating some fairly arbitrary hex values for Yellow Book mottle colours as:
+
+  * R Red    - 10R48  - #9A4832
+  * O Orange - 5YR78  - #E69D64
+  * B Brown  - 10YR46 - #7F5921
+  * Y Yellow - 5Y88   - #E2C75A
+  * G Grey   - 10YR61 - #9B9288
+  * D Dark   - 10YR31 - #4F463E
+  * L Gley   - 10GY51 - #81786F
+  * P Pale   - 10YR81 - #CFC7BB
+  
+This might help with e.g. code-generated soil profile diagrams, but users should be aware that the YB colours conceal a fair bit of variation, particularly the dark/brown/pale codes.
+
