@@ -1,0 +1,306 @@
+---
+title: "Morphology WFS - Option 2"
+output: html_document
+author: "Lauren O'Brien"
+date: "`r Sys.Date()`"
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, results = 'hold', fig.height = 6,
+                      fig.align = 'center', warning = FALSE, message = FALSE,
+                      eval = FALSE)
+```
+
+### Background
+
+Experiments with extracting and formatting soils morphology data in a form useful for TERN SLGA II modelling. Outputs will be published as a Web Feature Service. Potential for further development into a regular soils data service.
+
+```{r pkgs, results = 'hide'}
+options(stringsAsFactors = FALSE, scipen = 999)
+library(sf)            # vector data IO and processing
+library(units)         # for working with unit-attributed data
+library(tidyverse)     # general data manipulation and display
+```
+
+### 'Flat' conversion
+
+This option emphasises minimising the number of layers in the service to align with the 'join levels' of Site, Observation, Horizon, Veg Community. Keeping samples and notes separate too.
+
+```{r getdat}
+today <- '20191028' 
+sit_datafile <- file.path(getwd(), 'SALI_DATA', 
+                          paste0('SALI_SIT-data_', today, '.rds'))
+decode_datafile <- file.path(getwd(), 'SALI_DATA', 
+                             paste0('SALI_SIT-data_decodes_', today, '.rds'))
+
+sit_data <- readRDS(sit_datafile)
+decodes  <- readRDS(decode_datafile)
+```
+
+Pros:
+
+  * Simpler layer model
+  * Less repeated geometry data
+
+Cons 
+
+  * Smashing all the tables together neatly could be tricky - will need to alias some column names
+  * More repeated data from table joins, more NULL data
+  * Lose the ability to return useful created and updated dates 
+  * Display could be odd??
+
+#### Sites Layer
+
+Requires reconciling tables SIT, SLU, SMP, SGE, SGP and spatialising using Obs 1.
+
+```{r siteslyr}
+site_data <- sit_data[1:5]
+site_data <- lapply(site_data, function(x) {
+  dplyr::select(x, -matches('CREAT'), -matches('UPDAT')) 
+  })
+
+# context Proj code and context sid not in use on these projects so
+site_data[['SIT']] <- 
+  dplyr::select(site_data[['SIT']], -CONTEXT_PROJECT_CODE, -CONTEXT_SITE_ID)
+
+# duplicate column names in geomorph tables need aliasing 
+site_data[['SGE']] <- site_data[['SGE']] %>% 
+  rename(ELEM_GEO_AGENT = GEO_AGENT, ELEM_GEO_MODE = GEO_MODE)
+
+site_data[['SGP']] <- site_data[['SGP']] %>% 
+  rename(PATT_GEO_AGENT = GEO_AGENT, PATT_GEO_MODE = GEO_MODE)
+
+sites_layer <- reduce(site_data, full_join)
+
+# spatialise
+locs <- sit_data[['OLC']] %>% 
+  dplyr::filter(OBS_NO == 1) %>% 
+  st_as_sf(coords = c('LONGITUDE', 'LATITUDE'), crs = 4283) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID)
+
+sites_layer <- right_join(locs, sites_layer, by = c('PROJECT_CODE', 'SITE_ID'))
+
+names(sites_layer)
+
+# e.g.
+plot(dplyr::filter(sites_layer, PROJECT_CODE == 'BAB')['SLOPE_CLASS'], pch = 16)
+```
+
+#### Observations layer
+
+Requires reconciling tables OBS, OLC, OCL, ODS, OSC, OMC, OER, OCF, OTC, OSM
+
+```{r obslyr}
+obs_data <- sit_data[7:16]
+obs_data <- lapply(obs_data, function(x) {
+  dplyr::select(x, -matches('CREAT'), -matches('UPDAT')) 
+  })
+
+# redundant redundant
+obs_data[['OLC']] <- NULL
+
+# going to separate obs level veg data out 
+obs_data[['OBS']] <- obs_data[['OBS']] %>% 
+  dplyr::select(-FOREST_TYPE, -matches('RAINFOR'), -SCLEROPHYLL)
+
+obs_layer <- reduce(obs_data, full_join)
+
+locs <- sit_data[['OLC']] %>% 
+  st_as_sf(coords = c('LONGITUDE', 'LATITUDE'), crs = 4283) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO)
+
+obs_layer <- 
+  right_join(locs, obs_layer, by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO'))
+
+names(obs_layer)
+
+# e.g.
+plot(dplyr::filter(obs_layer, PROJECT_CODE == 'BAB')['DRAINAGE'], pch = 16)
+```
+
+#### Horizons layer
+
+Requires reconciling tables HOR, HSX, HCO, HMT, HCF, HST, HSG, HFB, HCU, HCR, HMP, HGT, HPA, HRT, FTS
+
+Skipping HSX as all the data actually appears in HOR$HORIZON_NAME
+
+```{r obslyr}
+hor_data <- sit_data[20:34]
+hor_data[['HSX']] <- NULL
+hor_data <- lapply(hor_data, function(x) {
+  dplyr::select(x, -matches('CREAT'), -matches('UPDAT')) 
+  })
+
+# also need hex colours
+hex_cols <- read_csv(file.path(getwd(), 'helpers', 'translated_colours.csv')) %>% 
+  dplyr::select(COLOUR_BOOK, COLOUR_CODE, HEX)
+
+# so much aliasing augh
+hor_data[['HOR']] <- hor_data[['HOR']] %>% 
+  rename(HOR_BOUND_DISTINCT = BOUND_DISTINCT, HOR_BOUND_SHAPE = BOUND_SHAPE)
+
+hor_data[['HCO']] <- hor_data[['HCO']] %>% 
+  left_join(hex_cols, by = c('COLOUR_BOOK', 'COLOUR_CODE')) %>% 
+  rename(HOR_COLOUR_BOOK = COLOUR_BOOK, HOR_COLOUR_CODE = COLOUR_CODE,
+         HOR_MOISTURE_STAT = MOISTURE_STAT, HOR_HEXCODE = HEX)
+
+hor_data[['HMT']] <- hor_data[['HMT']] %>%  
+  left_join(hex_cols, by = c('COLOUR_BOOK', 'COLOUR_CODE')) %>% 
+  rename(MOTT_COLOUR_BOOK = COLOUR_BOOK, MOTT_COLOUR_CODE = COLOUR_CODE, 
+         MOTT_MOISTURE_STAT = MOISTURE_STAT, MOTT_HEXCODE = HEX,
+         MOTT_CONTRAST = CONTRAST, MOTT_ABUNDANCE = ABUNDANCE, 
+         MOTT_BOUND_DISTINCT = BOUND_DISTINCT)
+
+hor_data[['HCF']] <- hor_data[['HCF']] %>%
+  rename(COARSE_FRAG_ABUNDANCE = ABUNDANCE, COARSE_FRAG_LITH_CODE = LITH_CODE,
+         COARSE_FRAG_SHAPE = SHAPE, COARSE_FRAG_STRENGTH = STRENGTH,
+         COARSE_FRAG_DISTRIBUTION = DISTRIBUTION, 
+         COARSE_FRAG_ALTERATION = ALTERATION )
+
+# structures is ok
+
+hor_data[['HSG']] <- hor_data[['HSG']] %>%
+  rename(SEG_ABUNDANCE = ABUNDANCE, SEG_NATURE = NATURE, 
+         SEG_STRENGTH = STRENGTH, SEG_MAGNETIC_ATTRIB = MAGNETIC_ATTRIB)
+
+hor_data[['HFB']] <- hor_data[['HFB']] %>%
+  rename(FAB_ABUNDANCE = ABUNDANCE)
+
+hor_data[['HCU']] <- hor_data[['HCU']] %>%
+  rename(CUTAN_ABUNDANCE = ABUNDANCE, CUTAN_DISTINCTNESS = DISTINCTNESS)
+
+hor_data[['HCR']] <- hor_data[['HCR']] %>%
+  rename(CRACK_WIDTH = WIDTH)
+
+hor_data[['HMP']] <- hor_data[['HMP']] %>%
+  rename(MACRO_ABUNDANCE = ABUNDANCE, MACRO_DIAMETER = DIAMETER)
+
+hor_data[['HGT']] <- hor_data[['HGT']] %>%
+  rename(STREN_CLASS = CLASS, STREN_WATER_STAT = WATER_STAT)
+
+hor_data[['HPA']] <- hor_data[['HPA']] %>%
+  rename(PAN_CEMENTATION = CEMENTATION, PAN_CONTINUITY = CONTINUITY, 
+         PAN_STRUCTURE = STRUCTURE)
+
+hor_data[['HRT']] <- hor_data[['HRT']] %>%
+  rename(ROOT_ABUNDANCE = ABUNDANCE)
+
+hor_data[['FTS']] <- hor_data[['FTS']] %>%
+  rename(FIELD_TEST_NO = TEST_NO, FIELD_TEST_TYPE = TEST_TYPE, 
+         FIELD_TEST_DEPTH = DEPTH, FIELD_TEST_VALUE = VALUE, 
+         FIELD_TEST_METHOD = METHOD)
+
+horizon_layer <- reduce(hor_data, full_join) %>% 
+  right_join(locs, ., by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO'))
+
+# e.g.
+bundy_scol <- dplyr::filter(horizon_layer, PROJECT_CODE == 'BAB' & 
+                              between(UPPER_DEPTH, 0.25, 0.5) &
+                              HOR_MOISTURE_STAT == 'M')
+
+plot(bundy_scol[0], pch = 16, col = bundy_scol$HOR_HEXCODE)
+```
+
+#### Vegetation Layer
+
+Requires reconciling VCM, VST, VSP plus veg data from OBS
+
+```{r veglayer}
+veg_data <- sit_data[c(7, 17:19)]
+
+veg_data <- lapply(veg_data, function(x) {
+  dplyr::select(x, -matches('CREAT'), -matches('UPDAT')) 
+  })
+
+veg_data[['OBS']] <- veg_data[['OBS']] %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO,
+                FOREST_TYPE, matches('RAINFOR'), SCLEROPHYLL)
+
+veg_data[['VCM']] <- veg_data[['VCM']] %>% 
+  rename(VEG_COMM_NAME = NAME, VEG_COMM_DESCRIPTION = DESCRIPTION) %>% 
+  # not in use 
+  dplyr::select(-REF_VEG_COMM_NO)
+
+vegetation_layer <- reduce(veg_data, full_join) %>% 
+  right_join(locs, ., by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO'))
+
+#e.g.
+bundy_toltrees <-  dplyr::filter(vegetation_layer, PROJECT_CODE == 'BAB' &
+                                   VEG_STRATA_CODE == 'T')
+
+plot(bundy_toltrees['HEIGHT_CLASS'], pch = 16)
+```
+
+#### Notes
+
+Just needs to be spatialised
+
+```{r noteslayer}
+notes_layer <- right_join(locs, sit_data[['NOT']],
+                          by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO')) %>% 
+  dplyr::select(-matches('CREAT'), -matches('UPDAT')) 
+  
+
+```
+
+#### Samples
+
+As for notes
+
+```{r noteslayer}
+samples_layer <- right_join(locs, sit_data[['SAM']],
+                            by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO')) %>% 
+  dplyr::select(-matches('CREAT'), -matches('UPDAT')) 
+
+```
+
+### Assemble
+
+```{r flatsvc}
+flat_service <- list(sites_layer, obs_layer, horizon_layer, vegetation_layer,
+                     samples_layer, notes_layer)
+names(flat_service) <- c('soil_sites', 'soil_observations', 'soil_horizons',
+                         'vegetation', 'soil_samples', 'notes')
+saveRDS(flat_service, 
+        file.path(getwd(), 'DERIVED_DATA', 'SALI_Morph_Spatial_flat.rds'))
+# flat_service <- readRDS(file.path(getwd(), 'DERIVED_DATA', 'SALI_Morph_Spatial_flat.rds'))
+```
+
+Quite a bit smaller than the simple conversion.
+
+### Output
+
+Writing to FGDB for use in Arc:
+
+```{r create_gdb, eval _FALSE}
+# NB currently experiencing problems using reticulate and arcgisbinding in the
+# same session - one prevents the other finding the license >:-(
+test_gdb <- file.path(getwd(), 'DERIVED_DATA', 'TEST_02_FLAT.gdb')
+
+if(!(dir.exists(test_gdb))) {
+  # launch access to arcpy
+  library(reticulate)
+  arcpy3_dir <- 'C:/Program Files/ArcGIS/Pro/bin/Python'
+  system2(file.path(arcpy3_dir, 'Scripts', 'proenv.bat'))
+  # make an empty file geodatabase
+  arcpy <- import('arcpy')
+  arcpy$CreateFileGDB_management(file.path(getwd(), 'DERIVED_DATA'), 
+                                 'TEST_02_FLAT.gdb')
+}
+
+```
+
+```{r write_gdb}
+library(arcgisbinding) # arcgis interface
+arc.check_product()
+
+purrr::map2(flat_service, names(flat_service), function(lyr, nm) {
+  arc.write(file.path(test_gdb, nm), lyr, overwrite = TRUE)
+})
+
+```
+
+
+***
