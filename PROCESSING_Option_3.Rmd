@@ -282,16 +282,16 @@ plot(dplyr::filter(layer_6, PROJECT_CODE == 'BAB' &
 
 ### Layer 7 - Horizon mottles 
 
-A minority of mottles are described with reference to Munsell codes so may as well supply a hex value here too. Nominating some fairly arbitrary hex values for Yellow Book mottle colours as:
+A minority of mottles are described with reference to Munsell codes - most are described using the simpler Yellow Book colours. May as well supply a hex value here too, with reference to common values seen in the field. Nominating some fairly arbitrary hex values for Yellow Book mottle colours as:
 
-  * R Red    - 10R48  - #994730
-  * O Orange - 5YR78  - #E89E63
-  * B Brown  - 10YR46 - #805921
-  * Y Yellow - 5Y88   - #E1C85A
-  * G Grey   - 10YR61 - #9E9187
-  * D Dark   - 10YR31 - #4F453D
-  * L Gley   - 10GY51 - #737D73
-  * P Pale   - 10YR81 - #D1C7BD
+  * R Red    - 10R48  - #9A4832
+  * O Orange - 5YR78  - #E69D64
+  * B Brown  - 10YR46 - #7F5921
+  * Y Yellow - 5Y88   - #E2C75A
+  * G Grey   - 10YR61 - #9B9288
+  * D Dark   - 10YR31 - #4F463E
+  * L Gley   - 10GY51 - #81786F
+  * P Pale   - 10YR81 - #CFC7BB
   
 This might help with e.g. code-generated soil profile diagrams, but users should be aware that the YB colours conceal a fair bit of variation, particularly the dark/brown/pale codes.
 
