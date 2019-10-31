@@ -1,17 +1,11 @@
 ---
-title: "TERN - morphology data for SLGA II - Layer 1"
+title: "Morphology WFS - Fancy bits"
 output: html_document
 author: "Lauren O'Brien"
-date: `r Sys.Date()`
+date: "`r Sys.Date()`"
 editor_options: 
   chunk_output_type: console
 ---
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
-
-Experiments with extracting and formatting soils morphology data in a form useful for TERN SLGA II modelling. Outputs will be published as a Web Feature Service. Potential for further development into a regular soils data service.
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, results = 'hold', fig.height = 6,
@@ -19,31 +13,12 @@ knitr::opts_chunk$set(echo = FALSE, results = 'hold', fig.height = 6,
                       eval = FALSE)
 ```
 
-```{r pkgs, results = 'hide'}
-options(stringsAsFactors = FALSE, scipen = 999)
-library(DBI)           # database interface
-library(ROracle)       # Oracle database drivers
-library(getPass)       # password management
-library(sf)            # vector data IO and processing
-library(units)         # for working with unit-attributed data
-library(tidyverse)     # general data manipulation and display
+Some parameters might be worth presenting at Observation level in a summarised manner.
 
-Sys.setenv(
-  'TNS_ADMIN'   = file.path('C:', 'Users', Sys.getenv('USERNAME'), 'Oracle'),
-  'ORACLE_HOME' = 'C:/Program Files/Oracle Instant Client'
-  )
-SALI <- dbConnect(dbDriver('Oracle'),
-                  username = 'obrienle',
-                  password = getPass(),
-                  dbname   = 'sispda',
-                  host     = 'ex02client01',
-                  port     = 1521)
-```
-
-Load data snapshot from 'DATA_sali-extract.Rmd'.
+These can be appended to either version of the draft service.
 
 ```{r getdat}
-today <- '20191025' 
+today <- '20191028' 
 sit_datafile <- file.path(getwd(), 'SALI_DATA', 
                           paste0('SALI_SIT-data_', today, '.rds'))
 decode_datafile <- file.path(getwd(), 'SALI_DATA', 
@@ -53,88 +28,11 @@ sit_data <- readRDS(sit_datafile)
 decodes  <- readRDS(decode_datafile)
 ```
 
-## Service structure
-
-Initial plans are to publish a two-layer web feature service with point geometry:
-
-  * Layer 1: Observation-level data, plus profile summary information like depth to A
-  * Layer 2: Horizon-level data relevant to SLGA II modelling 
-  
-Since the spec for SLGA II is not yet settled, the content of the layers is likely to change. The ASRIS tech specs v1.6 will also be used to guide the service structure, particularly Table 52 (Recommended Minimum Dataset for the ASRIS profile database).
-
-## Layer 1
-
-Primary keys are `PROJECT_CODE`, `SITE_ID`, `OBS_NO`.
-
-Data is filtered to projects where `REG_PROJECTS.AVAIL_STATUS = 'E'` and `REG_PROJECTS.SITE_QC_STATUS = 'P'`. It may also be necessary to filter on `REG_PROJECTS.PROJ_QC_STATUS = 'P'` for consistency with existing services and APIs, although it should be noted that none of the fields checked by the project-level QC procedure are relevant to this service.
-
-### Simple parameters 
-
-Simple parameters are those where only one record per site or per observation exists, so they're easier just to query out in one go:
-
-  * Observation date
-  * Site and obs type, obs reason
-  * Land Use
-  * Location coordinates
-  * Location measurement method and EPE where known
-  * Runoff, permeability and drainage classes
-  * Landform element and pattern codes
-  * Slope and relief parameters 
-  * Soil classifications (ASC, PPF, GSG)
-
-Where more than one soil classification exists on an observation, they usually refer to a classification for one or more buried profiles. Since buried profiles are not being modelled, these are excluded and only the first soil classification record is retained.
-
-Tax unit codes are unlikely to be useful to the modelling as SPC-level data is not being used, so those are left out for now. Other parameters may also be dropped if their value proves low.
-
-```{r layer_simple}
-# some queries are still way more efficient in SQL *shrug*
-l1s_datafile <- file.path(getwd(), 'SALI_DATA', 
-                          paste0('l1_simple_', today, '.rds'))
-
-if(file.exists(l1s_datafile)) {
-  l1_simple <- readRDS(l1s_datafile)
-} else {
-  l1_simple <- 
-    dbGetQuery(SALI, 
-               "select project_code, site_id, obs_no,
-                 obs_date, site_type, obs_type,
-                 longitude, latitude, loc_accuracy, loc_meas_method,
-                 runoff, permeability, drainage, lith_code, land_use_code,
-                 slope_eval_method, slope_pct, slope_class, slope_morph_type, 
-                 elem_inc_slope, elem_type_code,
-                 modal_slope, relief_class, rel_mod_slope_class, patt_type_code,
-                 asc_confidence, asc_ord, subord_asc_code as asc_subord, 
-                 great_group_asc_code as asc_great_group,
-                 subgroup_asc_code as asc_subgroup,
-                 asc_fam1, asc_fam2, asc_fam3, asc_fam4, asc_fam5, 
-                 ppf, exhibit_gsg_code as gsg
-               from reg_projects
-               join sit_sites using (project_code)
-               join sit_observations using (project_code, site_id)
-               join sit_locations using (project_code, site_id, obs_no)
-               left outer join (select * from sit_soil_classifications 
-                 where soil_class_no = 1) sc 
-                   using (project_code, site_id, obs_no)
-               where avail_status = 'E'
-               and site_qc_status = 'P'
-               and datum = 3
-               order by project_code, site_id, obs_no") %>% 
-    dplyr::filter(LONGITUDE > 1) # >:-(
-  saveRDS(l1_simple, l1s_datafile)
-} 
-
-```
- 
 ### Abbreviated parameters 
   
-Some site and observation-level parameters can have multiple records, but for Layer 1 they can be reported in a simplified format. These are
+Some site and observation-level parameters can have multiple records, but these can be reported in a simplified format. 
 
-  * Site disturbance (report 'worst')
-  * Microrelief (report presence/absence)
-  * Surface coarse fragments (report total abundance, dominant size, and maximum size)
-  * Outcrop (report dominant abundance and lithology)
-  
-#### Site disturbance
+#### Maximum site disturbance
 
 Note that only 132 observations currently have more than one disturbance recorded, and at least one is just a duplicate, where the same disturbance code was entered twice.
 
@@ -146,7 +44,7 @@ l1_dist <-
   summarise(DISTURBANCE = as.character(max(as.integer(DISTURB_TYPE))))
 ```
 
-#### Microrelief presence
+#### Landscape microrelief presence
 
 The following simplifies the SALI microrelief records down to 'present'/'confirmed absent'/'not recorded', for 'landscape' microrelief only - that which is controlled by inherent soil and parent material properties. As such, the gilgai types are retained, along with karst and mound/depression microrelief. Excluded are biotic microrelief (as its often ephemeral/changeable), limited-extent features like sinkholes and springs, and microrelief induced by loss of vegetation cover (e.g. terracettes and slumps).
 
@@ -168,7 +66,7 @@ l1_gilgai <-
   })
 ```
 
-#### Surface coarse fragments
+#### Total surface coarse fragments
 
 Multiple records can be created for surface coarse fragments where e.g. poorly sorted lag gravels exist. Below, surface coarse fragment data is simplified to report total abundance category, and then both the maximum and most abundant size fractions observed. Lithology and shape are omitted for now as they may not be highly relevant to modelling e.g. surface water infiltration.
 
@@ -215,7 +113,7 @@ l1_scf <-
 # TODO get a test suite going for this
 ```
 
-#### Rock Outcrop
+#### Total Rock Outcrop
 
 Very few multiple outcrop records exist, but where they do, total abundance is reported. 
 
@@ -260,7 +158,7 @@ NB: check for any sites with both outcrop and SCF maxed out...
 
 ### Profile summary parameters
 
-Many summaries of soil profile characteristics can be reported at the observation level. These include a number that have been specifically requested for SLGA II, others from the ASRIS tech spec (v1.6), and others can be derived from diagnostic criteria used in the ASC. More may be added, potentially on request.
+Many summaries of soil profile characteristics can be reported at the Observation level. These include a number that have been specifically requested for SLGA II, others from the ASRIS tech spec (v1.6), and others can be derived from diagnostic criteria used in the ASC. More may be added, potentially on request.
 
   * Depth of A1 horizon
   * Total depth of A horizons
@@ -413,9 +311,7 @@ May as well put all the depths together and check for crazy
 l1_depths <- reduce(list(d_A1, d_A, d_B2, d_phys_imp, d_sol, d_obs),
                    full_join, by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO'))
 
-
 ```
-
 
 #### Number of horizons
 
@@ -432,7 +328,7 @@ h_count <-
 
 #### Deepest horizon name
 
-Where this is e.g. A or B, the site should be excluded from attempts to model depth of soil.
+Where this is e.g. A or B, the site should be excluded from attempts to model depth of soil. The parent material will generally not have been reached.
 
 ```{r deepname}
 hname_max <- 
@@ -448,7 +344,7 @@ hname_max <-
 
 #### A and B horizon textures
 
-Texture codes are map back to a multidimensional space (at its simplest, a ternary sand/silt/clay plot) so they're kind of hard to rank. An attempt has been made in the file 'HELPER_ranking-texture-codes.Rmd' and the results are used below. Buried horizons are ignored.
+Texture codes can map back to a multidimensional space (at its simplest, a ternary sand/silt/clay plot) so they're kind of hard to rank. An attempt has been made in the file 'HELPER_ranking-texture-codes.Rmd' and the results are used below. Buried horizons are ignored.
 
 ```{r sumtext}
 # the quantiles below are roughly equivalent to +/- 1SD if the data were normal
@@ -515,7 +411,6 @@ max_B_tex <-
 
 AB_textures <- reduce(list(min_A_tex, max_A_tex, min_B_tex, max_B_tex),
                       full_join, by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO'))
-
 ```
 
 #### Bleached A2 presence
@@ -564,7 +459,7 @@ It may be useful, then, to define a combined scale of texture contrast behaviour
 
 By the above, rank 3's should always key out as SO/CH/KU in the ASC, and many of the rank 2's probably should as well.
 
-Note that there'll be a bunch of these that almost make the cut by recorded morphpology alone, but are either not classified because boundary sharpness data is missing, or ranked too low because boundary sharpness data is wrong. If the soil classification on one of these sites is an ASC SO/CH/KU, or a PPF of D*, they should be regarded as texture contrast soils too. The code below includes some overrides on the basis of classification.
+Note that there'll be a bunch of these that almost make the cut by recorded morphology alone, but are either not classified because boundary sharpness data is missing, or ranked too low because boundary sharpness data is wrong. If the soil classification on one of these sites is an ASC SO/CH/KU, or a PPF of D*, they should be regarded as texture contrast soils too. The code below includes some overrides on the basis of classification.
 
 ```{r duplexiness}
 # get bound_distinct of last A  or B1 horizon in profile
@@ -664,7 +559,7 @@ duplexiness <- full_join(last_bnd_distinct, is_next_B2) %>%
 
 #### Hardsetting status
 
-This has managment implications and is often requested.
+This has management implications and is often requested.
 
 ```{r hss}
 
@@ -676,9 +571,13 @@ hardset <- sit_data[['SCN']] %>%
 
 #### Surface colour
 
-This one's potentially handy for field ID of soils. Converting to ASC colour classes for simplicity and only using moist colours.
+This one's potentially handy for field ID of soils. Also returning ASC colour classes. Only using moist colours.
 
 ```{r surf_col}
+hex_cols <- 
+  read_csv(file.path(getwd(), 'helpers', 'translated_colours.csv')) %>% 
+  dplyr::select(COLOUR_BOOK, COLOUR_CODE, HEX)
+
 sit_colours <- decodes[['COL']] %>% 
   dplyr::select(COLOUR_BOOK, COLOUR_CODE, HUE, VALUE, CHROMA) %>% 
   left_join(., decodes[['CLV']], by = c('COLOUR_CODE' = 'SALI_COLOUR')) %>% 
@@ -739,9 +638,8 @@ B2_col <-  sit_data[['HOR']] %>%
 
 ***
 
-### Assemble final layer
+### Assemble 
 
-The layer components are now joined to create a one-row-per-observation dataset.
 
 ```{r l1_all}
 
