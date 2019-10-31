@@ -9,8 +9,7 @@ editor_options:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, results = 'hold', fig.height = 6,
-                      fig.align = 'center', warning = FALSE, message = FALSE,
-                      eval = FALSE)
+                      fig.align = 'center', warning = FALSE, message = FALSE)
 ```
 
 ## Background
@@ -20,7 +19,6 @@ Experiments with extracting and formatting Queensland soils morphology data for 
 ```{r pkgs, results = 'hide'}
 options(stringsAsFactors = FALSE, scipen = 999)
 library(sf)            # vector data IO and processing
-library(units)         # for working with unit-attributed data
 library(tidyverse)     # general data manipulation and display
 ```
 
@@ -37,15 +35,15 @@ sit_data <- readRDS(sit_datafile)
 
 Pros:
 
-  * layer structure is familiar to existing SALI users
-  * simple to extract and process data
-  * simple to write metadata
-  * minimises no-data cells in output layers
+  * Layer structure is familiar to existing SALI users
+  * Simple to extract and process data
+  * Simple to write metadata
+  * Minimises no-data cells in output layers
   
 Cons: 
 
   * WFS doesn't easily support cross-layer querying - joining tables must be done client-side
-  * geometry repeats a lot - inefficient?
+  * Geometry repeats a lot - inefficient?
   * Site-level data doesn't have a point location. Options:
       * Create multipoint geometry from all observations on a site
       * Create polygon from bounding box or convex hull of observations
@@ -53,20 +51,24 @@ Cons:
 
 Given that about 99.5% of sites have only one observation, the location of Observation 1 is used below to assign location to site-level data.
 
-```{r spatall}
+```{r spatialise_all}
 spat_data <- sit_data
  
+# not in use
+spat_data[['SIT']] <- 
+  dplyr::select(spat_data[['SIT']], -CONTEXT_PROJECT_CODE, -CONTEXT_SITE_ID)
+
 locs <- spat_data[['OLC']] %>% 
   st_as_sf(coords = c('LONGITUDE', 'LATITUDE'), crs = 4283) %>% 
   dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO)
 
-locs_o1 <- dplyr::filter(locs, OBS_NO == 1) %>% dplyr::select(-OBS_NO)
+locs_obs_1 <- dplyr::filter(locs, OBS_NO == 1) %>% dplyr::select(-OBS_NO)
 
 spat_data[['OLC']] <- NULL # will be redundant
 
 spat_data[1:5] <- 
   lapply(spat_data[1:5], function(lyr) {
-    right_join(locs_o1, lyr, by = c('PROJECT_CODE', 'SITE_ID')) %>% 
+    right_join(locs_obs_1, lyr, by = c('PROJECT_CODE', 'SITE_ID')) %>% 
       dplyr::select(-CREATED_BY, -LAST_UPDATED_BY)
     })
 
@@ -75,6 +77,11 @@ spat_data[6:length(spat_data)] <-
     right_join(locs, lyr, by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO')) %>% 
       dplyr::select(-CREATED_BY, -LAST_UPDATED_BY)
     })
+
+# rearrange for neat
+spat_data[['NOT']] <- spat_data[['NOT']] %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, everything())
+# i can stop any time i want!
 
 saveRDS(spat_data, file.path(getwd(), 'DERIVED_DATA', 'SALI_Morph_spatial.rds'))
 # spat_data <- readRDS(file.path(getwd(), 'DERIVED_DATA', 'SALI_Morph_spatial.rds'))
@@ -88,7 +95,7 @@ Writing to File GDB for use in Arc:
 
 Note that using `reticulate` and `arcgisbridge` in the same session appears impossible at present; one locks up the software license and precents the next from working :|
 
-```{r create_gdb, eval =FALSE}
+```{r create_gdb, eval = FALSE}
 test_gdb <- file.path(getwd(), 'DERIVED_DATA', 'TEST_01_SIMPLE.gdb')
 
 if(!(dir.exists(test_gdb))) {
@@ -100,12 +107,12 @@ if(!(dir.exists(test_gdb))) {
   arcpy <- import('arcpy')
   arcpy$CreateFileGDB_management(file.path(getwd(), 'DERIVED_DATA'), 
                                  'TEST_01_SIMPLE.gdb')
-  system2(file.path(arcpy3_dir, 'Scripts', 'deactivate.bat'))
 }
 
 ```
 
-```{r write_gdb, eval = FALSE}
+```{r write_gdb, eval = FALSE, echo = -1}
+test_gdb <- file.path(getwd(), 'DERIVED_DATA', 'TEST_01_SIMPLE.gdb')
 library(arcgisbinding)
 arc.check_product()
 
@@ -115,6 +122,12 @@ names(spat_data)[which(names(spat_data) == 'NOT')] <- 'NOTES'
 purrr::map2(spat_data, names(spat_data), function(lyr, nm) {
   arc.write(file.path(test_gdb, nm), lyr, overwrite = TRUE)
 })
+
+```
+
+```{r check_write, echo = -1}
+test_gdb <- file.path(getwd(), 'DERIVED_DATA', 'TEST_01_SIMPLE.gdb')
+sf::st_layers(test_gdb)
 
 ```
 

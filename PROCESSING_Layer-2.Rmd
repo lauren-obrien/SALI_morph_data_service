@@ -26,7 +26,7 @@ library(tidyverse)     # general data manipulation and display
 
 ```
 
-Load data snapshot from 'Layer-1-spec.rmd'
+Load data snapshot from 'DATA_sali-extract.rmd'.
 
 ```{r datammmmm}
 today <- '20191018' 
