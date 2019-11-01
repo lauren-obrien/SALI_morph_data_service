@@ -1,5 +1,5 @@
 ---
-title: "TERN - morphology data for SLGA II - Get Data"
+title: "Extract morphology data from SALI"
 output: html_document
 author: "Lauren O'Brien"
 date: "`r Sys.Date()`"
@@ -13,7 +13,7 @@ knitr::opts_chunk$set(echo = TRUE, results = 'hold', fig.height = 6,
                       eval = TRUE)
 ```
 
-```{r pkgs, results = 'hide'}
+```{r pkgs, results = 'hold'}
 options(stringsAsFactors = FALSE, scipen = 999)
 library(sf)            # vector data IO and processing
 library(DBI)           # database interface
@@ -38,6 +38,7 @@ if(!dir.exists(file.path(getwd(), 'SALI_DATA'))) {
   dir.create(file.path(getwd(), 'SALI_DATA'))
 }
 
+sessionInfo()
 ```
 
 ## Data snapshot
@@ -46,47 +47,47 @@ Take a snapshot of SALI sites module to work with offline. Filter on data that's
 
 The data-holding tables in the sites module are structured as follows:
 
-  1. SIT_SITES
-      2. SIT_SITE_LAND_USES
-      3. SIT_SITE_MAN_PRACS
-      4. SIT_ELEM_GEOMORPHS 
-      5. SIT_PATT_GEOMORPHS 
-      6. SIT_NOTES 
-      7. SIT_OBSERVATIONS
-          8.  SIT_LOCATIONS
-          9.  SIT_SOIL_CLASSIFICATIONS
-          10. SIT_DISTURBANCES 
-          11. SIT_SURFACE_CONDITIONS
-          12. SIT_MICRORELIEFS
-          13. SIT_EROSIONS
-          14. SIT_SURF_COARSE_FRAGS
-          15. SIT_ROCK_OUTCROPS
-          16. SIT_SUB_MINERAL_COMPS
-          17. SIT_VEG_COMMUNITIES
-              18. SIT_VEG_STRATA
-              19. SIT_VEG_STRATA_SPECIES
-          20. SIT_HORIZONS
-              21. SIT_HORIZON_SUFFICES
-              22. SIT_HORIZON_COLOURS
-              23. SIT_MOTTLES
-              24. SIT_COARSE_FRAGS
-              25. SIT_STRUCTURES
-              26. SIT_SEGREGATIONS
-              27. SIT_FABRICS
-              28. SIT_CUTANS
-              29. SIT_CRACKS
-              30. SIT_MACROPORES
-              31. SIT_STRENGTHS
-              32. SIT_PANS
-              33. SIT_ROOTS
-              34. SIT_FIELD_TESTS
-          35. SIT_SAMPLES
-              36. SIT_LAB_RESULTS
+  * 1 SIT_SITES
+      * 2 SIT_SITE_LAND_USES
+      * 3 SIT_SITE_MAN_PRACS
+      * 4 SIT_ELEM_GEOMORPHS 
+      * 5 SIT_PATT_GEOMORPHS 
+      * 6 SIT_NOTES 
+      * 7 SIT_OBSERVATIONS
+          * 8  SIT_LOCATIONS
+          * 9  SIT_SOIL_CLASSIFICATIONS
+          * 10 SIT_DISTURBANCES 
+          * 11 SIT_SURFACE_CONDITIONS
+          * 12 SIT_MICRORELIEFS
+          * 13 SIT_EROSIONS
+          * 14 SIT_SURF_COARSE_FRAGS
+          * 15 SIT_ROCK_OUTCROPS
+          * 16 SIT_SUB_MINERAL_COMPS
+          * 17 SIT_VEG_COMMUNITIES
+              * 18 SIT_VEG_STRATA
+              * 19 SIT_VEG_STRATA_SPECIES
+          * 20 SIT_HORIZONS  
+              * 21 SIT_HORIZON_SUFFICES
+              * 22 SIT_HORIZON_COLOURS
+              * 23 SIT_MOTTLES
+              * 24 SIT_COARSE_FRAGS
+              * 25 SIT_STRUCTURES
+              * 26 SIT_SEGREGATIONS
+              * 27 SIT_FABRICS
+              * 28 SIT_CUTANS
+              * 29 SIT_CRACKS
+              * 30 SIT_MACROPORES
+              * 31 SIT_STRENGTHS
+              * 32 SIT_PANS
+              * 33 SIT_ROOTS
+              * 34 SIT_FIELD_TESTS
+          * 35 SIT_SAMPLES  
+              * 36 SIT_LAB_RESULTS
 
 Some additional tables hold decodes (meanings) for the coded data and are extracted separately below.
 
 ```{r getdat}
-today <- '20191028' # edit for fresh snapshot
+today <- '20191101' # edit for fresh snapshot
 
 sit_datafile <- file.path(getwd(), 'SALI_DATA', 
                           paste0('SALI_SIT-data_', today, '.rds'))
@@ -390,7 +391,7 @@ if(file.exists(sit_datafile)) {
 
 ### Decode Tables
 
-Decodes for short code lists are all in one large table called SALI_REF_CODES, grouped by field RV_DOMAIN. See '/helpers/REF_CODE_DOMAINS_for_sites.xlsx' for some metadata.
+Decodes for short code lists are all in one large table called `SALI_REF_CODES`, grouped by field `RV_DOMAIN`. See `'/helpers/REF_CODE_DOMAINS_for_sites.xlsx'` for some contextual info.
 
 Longer code lists e.g. geology, landform elements are in their own tables
 
@@ -514,7 +515,7 @@ SIT_LOCATIONS <- st_as_sf(sit_data[['OLC']],
                           dim = 'XY')
 ```
 
-```{biggp, eval = FALSE}
+```{r biggp}
 # write locations to gpkg
 st_write(SIT_LOCATIONS, 
          file.path(getwd(), 'SALI_DATA',
