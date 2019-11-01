@@ -15,7 +15,7 @@ knitr::opts_chunk$set(echo = FALSE, results = 'hold', fig.height = 6,
 
 ### Background
 
-Experiments with extracting and formatting soils morphology data in a form useful for TERN SLGA II modelling. Outputs will be published as a Web Feature Service. Potential for further development into a regular soils data service.
+Experiments with extracting and formatting Queensland soils morphology data for WFS publication. Primary driver is the TERN SGLA II modelling (and particularly interface with the soil data federator https://github.com/RossDSearle/SoilDataFederatoR/) but the service should be useful to a wider range of clients as well.
 
 ```{r pkgs, results = 'hide'}
 options(stringsAsFactors = FALSE, scipen = 999)
@@ -38,10 +38,7 @@ SALI <- dbConnect(dbDriver('Oracle'),
                   port     = 1521)
 ```
 
-Exploring an alternate option where the service structure follows the SALI SITE database structure a bit more closely. Layer 1 will still have the calculated summaries seen in 'PROCESSING_Layer-1.Rmd', but some data like soil classification will be punted out to its own table.
-
-Pros: Less wasted space in tables, easier to metadata and visualise, more efficient downloading
-Cons: Some more complex queries might be forced client-side.  
+Earlier work - still mucking around in here 
 
 ## Structure
 

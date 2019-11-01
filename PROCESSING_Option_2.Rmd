@@ -8,14 +8,14 @@ editor_options:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE, results = 'hold', fig.height = 6,
+knitr::opts_chunk$set(echo = TRUE, results = 'hold', fig.height = 6,
                       fig.align = 'center', warning = FALSE, message = FALSE,
-                      eval = FALSE)
+                      eval = TRUE)
 ```
 
 ### Background
 
-Experiments with extracting and formatting soils morphology data in a form useful for TERN SLGA II modelling. Outputs will be published as a Web Feature Service. Potential for further development into a regular soils data service.
+Experiments with extracting and formatting Queensland soils morphology data for WFS publication. Primary driver is the TERN SGLA II modelling (and particularly interface with the soil data federator https://github.com/RossDSearle/SoilDataFederatoR/) but the service should be useful to a wider range of clients as well.
 
 ```{r pkgs, results = 'hide'}
 options(stringsAsFactors = FALSE, scipen = 999)
@@ -29,7 +29,7 @@ library(tidyverse)     # general data manipulation and display
 This option emphasises minimising the number of layers in the service to align with the 'join levels' of Site, Observation, Horizon, Veg Community. Keeping samples and notes separate too.
 
 ```{r getdat}
-today <- '20191028' 
+today <- '20191101' 
 sit_datafile <- file.path(getwd(), 'SALI_DATA', 
                           paste0('SALI_SIT-data_', today, '.rds'))
 decode_datafile <- file.path(getwd(), 'SALI_DATA', 
@@ -85,7 +85,22 @@ sites_layer <- right_join(locs, sites_layer, by = c('PROJECT_CODE', 'SITE_ID'))
 names(sites_layer)
 
 # e.g.
-plot(dplyr::filter(sites_layer, PROJECT_CODE == 'BAB')['SLOPE_CLASS'], pch = 16)
+demo <- dplyr::filter(sites_layer, PROJECT_CODE == 'GCL') %>% 
+  dplyr::filter(!is.na(SLOPE_CLASS)) %>% 
+  mutate(SC = factor(SLOPE_CLASS, 
+                     levels = c('LE', 'VG', 'GE', 'MO', 'ST', 'VS', 'CL'),
+                     labels = c('Level', 'Very Gentle', 'Gentle', 'Moderate',
+                                'Steep', 'Very Steep', 'Cliffed'), 
+                     ordered = TRUE))
+
+ggplot() +
+  geom_sf(data = demo, aes(colour = SC), pch = 16, size = 2,
+          show.legend = 'point') +
+  scale_colour_viridis_d() +
+  ggtitle("Slope Class", subtitle = "SALI Project GCL") +
+  labs(colour = 'Slope Class') +
+  theme_minimal()
+
 ```
 
 #### Observations layer
@@ -105,7 +120,7 @@ obs_data[['OLC']] <- NULL
 obs_data[['OBS']] <- obs_data[['OBS']] %>% 
   dplyr::select(-FOREST_TYPE, -matches('RAINFOR'), -SCLEROPHYLL)
 
-obs_layer <- reduce(obs_data, full_join)
+obs_layer <- reduce(obs_data, full_join) # still not quite right?? check
 
 locs <- sit_data[['OLC']] %>% 
   st_as_sf(coords = c('LONGITUDE', 'LATITUDE'), crs = 4283) %>% 
@@ -117,7 +132,21 @@ obs_layer <-
 names(obs_layer)
 
 # e.g.
-plot(dplyr::filter(obs_layer, PROJECT_CODE == 'BAB')['DRAINAGE'], pch = 16)
+demo <- dplyr::filter(obs_layer, PROJECT_CODE == 'GCL') %>% 
+  dplyr::filter(!is.na(DRAINAGE)) %>% 
+  mutate(DG = factor(DRAINAGE, 
+                     levels = c(1, 2, 3, 4, 5, 6),
+                     labels = c('Very Poor', 'Poor', 'Imperfect', 'Moderate', 
+                                'Well', 'Very Well'), 
+                     ordered = TRUE))
+
+ggplot() +
+  geom_sf(data = demo, aes(colour = DG), pch = 16, size = 2,
+          show.legend = 'point') +
+  scale_colour_viridis_d() +
+  ggtitle("Drainage Class", subtitle = "SALI Project GCL") +
+  labs(colour = 'Drainage Class') +
+  theme_minimal()
 ```
 
 #### Horizons layer
@@ -126,7 +155,7 @@ Requires reconciling tables HOR, HSX, HCO, HMT, HCF, HST, HSG, HFB, HCU, HCR, HM
 
 Skipping HSX as all the data actually appears in HOR$HORIZON_NAME
 
-```{r obslyr}
+```{r horlyr}
 hor_data <- sit_data[20:34]
 hor_data[['HSX']] <- NULL
 hor_data <- lapply(hor_data, function(x) {
@@ -196,11 +225,17 @@ horizon_layer <- reduce(hor_data, full_join) %>%
   right_join(locs, ., by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO'))
 
 # e.g.
-bundy_scol <- dplyr::filter(horizon_layer, PROJECT_CODE == 'BAB' & 
-                              between(UPPER_DEPTH, 0.25, 0.5) &
-                              HOR_MOISTURE_STAT == 'M')
+bundy_ph <- dplyr::filter(horizon_layer, PROJECT_CODE == 'GCL' & 
+                              FIELD_TEST_TYPE == 'PH' & FIELD_TEST_METHOD == 1 &
+                              HORIZON_NO == 1 & FIELD_TEST_NO == 1)
 
-plot(bundy_scol[0], pch = 16, col = bundy_scol$HOR_HEXCODE)
+ggplot() +
+  geom_sf(data = bundy_ph, aes(colour = FIELD_TEST_VALUE), pch = 16, size = 2,
+          show.legend = 'point') +
+  scale_colour_brewer(palette = 'RdBu') +
+  ggtitle("Surface pH", subtitle = "SALI Project GCL") +
+  labs(colour = 'pH') +
+  theme_minimal()
 ```
 
 #### Vegetation Layer
@@ -226,11 +261,6 @@ veg_data[['VCM']] <- veg_data[['VCM']] %>%
 vegetation_layer <- reduce(veg_data, full_join) %>% 
   right_join(locs, ., by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO'))
 
-#e.g.
-bundy_toltrees <-  dplyr::filter(vegetation_layer, PROJECT_CODE == 'BAB' &
-                                   VEG_STRATA_CODE == 'T')
-
-plot(bundy_toltrees['HEIGHT_CLASS'], pch = 16)
 ```
 
 #### Notes
@@ -249,7 +279,7 @@ notes_layer <- right_join(locs, sit_data[['NOT']],
 
 As for notes
 
-```{r noteslayer}
+```{r sampslayer}
 samples_layer <- right_join(locs, sit_data[['SAM']],
                             by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO')) %>% 
   dplyr::select(-matches('CREAT'), -matches('UPDAT')) 
@@ -274,7 +304,7 @@ Quite a bit smaller than the simple conversion.
 
 Writing to FGDB for use in Arc:
 
-```{r create_gdb, eval _FALSE}
+```{r create_gdb, eval= FALSE}
 # NB currently experiencing problems using reticulate and arcgisbinding in the
 # same session - one prevents the other finding the license >:-(
 test_gdb <- file.path(getwd(), 'DERIVED_DATA', 'TEST_02_FLAT.gdb')
@@ -292,7 +322,7 @@ if(!(dir.exists(test_gdb))) {
 
 ```
 
-```{r write_gdb}
+```{r write_gdb, eval = FALSE}
 library(arcgisbinding) # arcgis interface
 arc.check_product()
 
