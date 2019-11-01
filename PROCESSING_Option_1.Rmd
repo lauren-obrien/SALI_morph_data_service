@@ -24,10 +24,10 @@ library(tidyverse)     # general data manipulation and display
 
 ### 'Simple' conversion
 
-The simplest way to turn the morphology data into a service (from a maintainer's perspective, atl east) is just to keep the existing layer structure from the SALI database, and spatialise each table. 
+The simplest way to turn the morphology data into a service (from a maintainer's perspective, at least) is just to keep the existing layer structure from the SALI database, and spatialise each table. 
 
 ```{r datammmmm}
-today <- '20191028' 
+today <- '20191101' 
 sit_datafile <- file.path(getwd(), 'SALI_DATA', 
                           paste0('SALI_SIT-data_', today, '.rds'))
 sit_data <- readRDS(sit_datafile)
@@ -51,7 +51,7 @@ Cons:
 
 Given that about 99.5% of sites have only one observation, the location of Observation 1 is used below to assign location to site-level data.
 
-```{r spatialise_all}
+```{r spatialise_all, eval = FALSE}
 spat_data <- sit_data
  
 # not in use
@@ -83,6 +83,27 @@ spat_data[['NOT']] <- spat_data[['NOT']] %>%
   dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, everything())
 # i can stop any time i want!
 
+# Testing the build process in Arc highlights that Field test data really needs 
+# to be spread by test_type and method - however, since some sites have replicate
+# measurements, a REP_NO level needs to be added 
+# most replicates are probably import errors but some appear to be genuine,
+# so can't just take median or whatever
+# argh i'm too stupid for this today
+#fts_test <- sit_data[['FTS']] %>% 
+#  group_by(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, TEST_TYPE, METHOD, DEPTH) %>% 
+#  mutate(TEST_NO =,
+#         REP_NO = ) %>% 
+#  
+#  ungroup() %>% 
+#  unite('TEST_TYPE_METHOD', TEST_TYPE, METHOD, sep = '_METHOD_', na.rm = TRUE) %>% 
+#  pivot_wider(names_from = TEST_TYPE_METHOD, values_from = VALUE,
+#              id_cols = c(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, TEST_NO,DEPTH)) %>% 
+#  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, DEPTH, matches('^PH'),
+#                matches('^EC'), matches('^DISP'), matches('^SLAK'), everything()) %>% 
+#  rename(H2O2EF = H2O2) %>% 
+#  mutate_at(vars(matches('^PH|^EC')), as.numeric)
+
+
 saveRDS(spat_data, file.path(getwd(), 'DERIVED_DATA', 'SALI_Morph_spatial.rds'))
 # spat_data <- readRDS(file.path(getwd(), 'DERIVED_DATA', 'SALI_Morph_spatial.rds'))
 ```
@@ -93,7 +114,7 @@ All that geometry doubles the file size, yikes.
 
 Writing to File GDB for use in Arc:
 
-Note that using `reticulate` and `arcgisbridge` in the same session appears impossible at present; one locks up the software license and precents the next from working :|
+Note that using `reticulate` and `arcgisbridge` in the same session appears impossible at present; one locks up the software license and prevents the next from working :|
 
 ```{r create_gdb, eval = FALSE}
 test_gdb <- file.path(getwd(), 'DERIVED_DATA', 'TEST_01_SIMPLE.gdb')

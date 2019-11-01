@@ -1,0 +1,15 @@
+---
+output:
+  md_document:
+    variant: markdown_github
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Experiments with Queensland soils morphology data
+
+This is all public data, but currently only (easily) accessible in PDF decoded reports. Exploring alternatives.
+
+***

@@ -8,17 +8,21 @@ editor_options:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE, results = 'hold', fig.height = 6,
+knitr::opts_chunk$set(echo = TRUE, results = 'hold', fig.height = 6,
                       fig.align = 'center', warning = FALSE, message = FALSE,
-                      eval = FALSE)
+                      eval = TRUE)
 ```
 
 Some parameters might be worth presenting at Observation level in a summarised manner.
 
-These can be appended to either version of the draft service.
+These can be appended to any version of the draft service.
 
 ```{r getdat}
-today <- '20191028' 
+options(stringsAsFactors = FALSE, scipen = 999)
+library(sf)
+library(tidyverse)
+
+today <- '20191101' 
 sit_datafile <- file.path(getwd(), 'SALI_DATA', 
                           paste0('SALI_SIT-data_', today, '.rds'))
 decode_datafile <- file.path(getwd(), 'SALI_DATA', 
@@ -37,11 +41,13 @@ Some site and observation-level parameters can have multiple records, but these 
 Note that only 132 observations currently have more than one disturbance recorded, and at least one is just a duplicate, where the same disturbance code was entered twice.
 
 ```{r l1_dist}
-l1_dist <- 
-  dplyr::select(sit_data[['DIS']], 
+max_dist <- 
+  dplyr::select(sit_data[['ODS']], 
                 PROJECT_CODE, SITE_ID, OBS_NO, DISTURB_NO, DISTURB_TYPE) %>% 
   group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>%
   summarise(DISTURBANCE = as.character(max(as.integer(DISTURB_TYPE))))
+
+head(max_dist)
 ```
 
 #### Landscape microrelief presence
@@ -49,8 +55,8 @@ l1_dist <-
 The following simplifies the SALI microrelief records down to 'present'/'confirmed absent'/'not recorded', for 'landscape' microrelief only - that which is controlled by inherent soil and parent material properties. As such, the gilgai types are retained, along with karst and mound/depression microrelief. Excluded are biotic microrelief (as its often ephemeral/changeable), limited-extent features like sinkholes and springs, and microrelief induced by loss of vegetation cover (e.g. terracettes and slumps).
 
 ```{r l1_gilgai}
-l1_gilgai <-
-  dplyr::select(sit_data[['MIC']],
+gilgai <-
+  dplyr::select(sit_data[['OMC']],
                 PROJECT_CODE, SITE_ID, OBS_NO, MICRO_NO, MICRO_TYPE) %>%
   group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>%
   summarise(GILGAI_PRESENT = {
@@ -64,6 +70,8 @@ l1_gilgai <-
       NA_character_
     }
   })
+
+head(gilgai)
 ```
 
 #### Total surface coarse fragments
@@ -94,8 +102,8 @@ tot_abund <- function(x = NULL) {
   as.character(cf_abunds$ABUND[catout])
 }
 
-l1_scf <- 
-  dplyr::select(sit_data[['SCF']],
+max_scf <- 
+  dplyr::select(sit_data[['OCF']],
                 PROJECT_CODE, SITE_ID, OBS_NO, SURF_FRAG_NO, ABUNDANCE, 
                 SURF_FRAG_SIZE) %>% 
   rename(SURF_FRAG_ABUND = ABUNDANCE) %>%
@@ -109,16 +117,18 @@ l1_scf <-
                      as.character(max(SURF_FRAG_SIZE, na.rm = TRUE))),
             SURF_FRAG_DOM_SIZE =
               ifelse(n() == 1, SURF_FRAG_SIZE, 
-                     SURF_FRAG_SIZE[which(SURF_FRAG_ABUND == max(SURF_FRAG_ABUND))][1]))
+                     SURF_FRAG_SIZE[which(SURF_FRAG_ABUND == max(SURF_FRAG_ABUND))][1])) %>% 
+  ungroup()
 # TODO get a test suite going for this
+head(max_scf)
 ```
 
 #### Total Rock Outcrop
 
-Very few multiple outcrop records exist, but where they do, total abundance is reported. 
+Very few multiple outcrop records exist, but where they do, total abundance can be reported. 
 
 ```{r l1_outcrop}
-# decode coarse frag abundance categories
+# decode outcrop abundance categories
 oc_abunds <- tribble(~ABUND, ~LO, ~MID, ~HI,
                         0,   0,    0,   0,
                         1, 0.1,  1.5,   2,
@@ -140,7 +150,7 @@ tot_abund <- function(x = NULL) {
   as.character(oc_abunds$ABUND[catout])
 }
 
-l1_outcrop <- 
+max_outcrop <- 
   dplyr::select(sit_data[['OTC']],
                 PROJECT_CODE, SITE_ID, OBS_NO, OUTCROP_NO, ABUNDANCE, LITH_CODE) %>% 
   rename(OUTCROP_ABUND = ABUNDANCE) %>% 
@@ -152,6 +162,7 @@ l1_outcrop <-
             OUTCROP_DOM_LITH_CODE = ifelse(n() == 1, LITH_CODE, 
                      LITH_CODE[which(OUTCROP_ABUND == max(OUTCROP_ABUND))][1]))
 
+head(max_outcrop)
 ```
 
 NB: check for any sites with both outcrop and SCF maxed out...
@@ -176,7 +187,7 @@ Many summaries of soil profile characteristics can be reported at the Observatio
 
 #### Depth of A1
 
-```{r doa}
+```{r doa1}
 d_A1 <- 
   dplyr::select(sit_data[['HOR']],
                 PROJECT_CODE, SITE_ID, OBS_NO, 
@@ -206,7 +217,7 @@ d_A <-
 
 #### Depth to B2
 
-```{r doa}
+```{r db2}
 d_B2 <- 
   dplyr::select(sit_data[['HOR']],
                 PROJECT_CODE, SITE_ID, OBS_NO, 
@@ -223,7 +234,7 @@ d_B2 <-
 
 The ASRIS specs define impeding layers as a result of chemical toxicity, chemical deficiency, direct physical impedance, or permanent water table, in the context of effects on agricultural plants (Table 29). The following focuses only on physical and hydrological impedance. Note that many non-agricultural plants are not affected by these impedances, particularly the water table depth (e.g. mangroves).
 
-Parameters examined are calculated depth to R horizon, depth to continuous cemented pan, and depth to permanent water table.
+Parameters examined below are calculated depth to R horizon, depth to continuous cemented pan, and depth to permanent water table.
 
 Note: Depth to R horizon is sometimes also recorded at the observation level, but sigificant data quality problems in SALI mean that this field is currently unusable. Known issues:
   * large number of values recorded in centimeters rather than meters, inconsistently within and between projects
@@ -237,7 +248,7 @@ d_2r_hor <- dplyr::filter(sit_data[['HOR']], DESIGN_MASTER == 'R') %>%
   summarise(DEPTH_R_HOR = min(UPPER_DEPTH, na.rm = TRUE))
 
 d_pan <- 
-  dplyr::filter(sit_data[['PAN']], !is.na(CEMENTATION)) %>% 
+  dplyr::filter(sit_data[['HPA']], !is.na(CEMENTATION)) %>% 
   dplyr::filter(!(CEMENTATION %in% c('0', '1'))) %>% 
   dplyr::filter(CONTINUITY == 'C') %>% 
   dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, PAN_NO, 
@@ -280,7 +291,7 @@ The ASRIS spec is silent on a good definition of solum, and other definitions ar
 
 There's no easy way to truncate those where a non-A or B horizon interrupts the profile sequence (e.g. distinguishing A-B-Db1-Db2-2A-2B from A-B-2B), but these are going to be rare and the non A/B horizons may not impede plant growth, so IMO still count as solum materials.
 
-```{r doa}
+```{r dosol}
 d_sol <-
   dplyr::select(sit_data[['HOR']],
                 PROJECT_CODE, SITE_ID, OBS_NO, DESIGN_NUM_PREFIX, 
@@ -296,7 +307,7 @@ d_sol <-
 
 This is just the maximum recorded horizon depth.
 
-```{r doa}
+```{r dobs}
 d_obs <- 
    dplyr::select(sit_data[['HOR']],
                 PROJECT_CODE, SITE_ID, OBS_NO, LOWER_DEPTH) %>% 
@@ -308,9 +319,9 @@ d_obs <-
 May as well put all the depths together and check for crazy
 
 ```{r depths}
-l1_depths <- reduce(list(d_A1, d_A, d_B2, d_phys_imp, d_sol, d_obs),
+all_depths <- reduce(list(d_A1, d_A, d_B2, d_phys_imp, d_sol, d_obs),
                    full_join, by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO'))
-
+head(all_depths)
 ```
 
 #### Number of horizons
@@ -323,7 +334,7 @@ h_count <-
                 PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NAME) %>% 
   group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>% 
   summarise(HORIZON_COUNT = sum(!is.na(HORIZON_NAME))) 
-
+head(h_count)
 ```
 
 #### Deepest horizon name
@@ -336,10 +347,11 @@ hname_max <-
                 PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, HORIZON_NAME) %>% 
   filter(!is.na(HORIZON_NAME)) %>%
   left_join(., h_count, by = c('PROJECT_CODE', 'SITE_ID' ,'OBS_NO')) %>% 
-  dplyr::filter(HORIZON_NO == H_COUNT) %>% 
+  dplyr::filter(HORIZON_NO == HORIZON_COUNT) %>% 
   dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NAME) %>% 
   rename(DEEPEST_HORIZON = HORIZON_NAME)
-  
+
+head(hname_max)  
 ```
 
 #### A and B horizon textures
@@ -411,6 +423,7 @@ max_B_tex <-
 
 AB_textures <- reduce(list(min_A_tex, max_A_tex, min_B_tex, max_B_tex),
                       full_join, by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO'))
+head(AB_textures)
 ```
 
 #### Bleached A2 presence
@@ -430,6 +443,7 @@ has_bleach <- sit_data[['HOR']] %>%
   summarise(HAS_BLEACH = 
               if(any(grepl('e', HORIZON_NAME))) { TRUE } else { FALSE })
 
+head(has_bleach)
 ```
 
 #### Duplexiness/Texture Contrast presence
@@ -519,7 +533,7 @@ group_2 <- dplyr::select(tex_ranks, TEXTURE, GROUP_2) %>%
          ordered = TRUE))
 
 # dplx soil classifs
-dupl_class <- dplyr::filter(sit_data[['CLA']], SOIL_CLASS_NO == 1) %>% 
+dupl_class <- dplyr::filter(sit_data[['OCL']], SOIL_CLASS_NO == 1) %>% 
   dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, ASC_ORD, PPF) %>% 
   mutate(PPF_TC = ifelse(grepl('^D(r|b|y|d|g)', PPF) == TRUE, TRUE, FALSE),
          PPF_TC = ifelse(is.na(PPF), NA, PPF_TC),
@@ -555,6 +569,7 @@ duplexiness <- full_join(last_bnd_distinct, is_next_B2) %>%
                                  TRUE ~ DUPLEXINESS))  %>% 
   dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, DUPLEXINESS)
 
+head(duplexiness)
 ```
 
 #### Hardsetting status
@@ -562,11 +577,10 @@ duplexiness <- full_join(last_bnd_distinct, is_next_B2) %>%
 This has management implications and is often requested.
 
 ```{r hss}
-
-hardset <- sit_data[['SCN']] %>% 
+hardset <- sit_data[['OSC']] %>% 
   group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>% 
   summarise(HARDSETTING = ifelse('H' %in% STATUS, 'Yes', 'No'))
-
+head(hardset)
 ```
 
 #### Surface colour
@@ -576,12 +590,6 @@ This one's potentially handy for field ID of soils. Also returning ASC colour cl
 ```{r surf_col}
 hex_cols <- 
   read_csv(file.path(getwd(), 'helpers', 'translated_colours.csv')) %>% 
-  dplyr::select(COLOUR_BOOK, COLOUR_CODE, HEX)
-
-sit_colours <- decodes[['COL']] %>% 
-  dplyr::select(COLOUR_BOOK, COLOUR_CODE, HUE, VALUE, CHROMA) %>% 
-  left_join(., decodes[['CLV']], by = c('COLOUR_CODE' = 'SALI_COLOUR')) %>% 
-  rename(HEX_COLOUR = RGB_VALUE) %>% 
   mutate(ASC_COL_FAM = ifelse(HUE %in% c('5R', '7.5R', '10R', '2.5YR', '5YR'),
                               'red_fam', 'yellow_fam'),
          ASC_COL_CLASS = case_when(
@@ -595,15 +603,16 @@ sit_colours <- decodes[['COL']] %>%
            TRUE ~ NA_character_
          ))
 
-surf_col <- sit_data[['COL']] %>% 
+surf_col <- sit_data[['HCO']] %>% 
   dplyr::filter(HORIZON_NO == 1 & MOISTURE_STAT == 'M') %>% 
   dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, COLOUR_BOOK, COLOUR_CODE) %>% 
-  left_join(., sit_colours, by = c('COLOUR_BOOK', 'COLOUR_CODE')) %>% 
-  select(PROJECT_CODE, SITE_ID, OBS_NO, HEX_COLOUR, ASC_COL_CLASS) %>% 
+  left_join(., hex_cols, by = c('COLOUR_BOOK', 'COLOUR_CODE')) %>% 
+  select(PROJECT_CODE, SITE_ID, OBS_NO, COLOUR_CODE, HEX, ASC_COL_CLASS) %>% 
   rename(
-    SURFACE_HEX_COLOUR = HEX_COLOUR,
+    SURFACE_HEX_COLOUR = HEX,
     SURFACE_COLOUR_CLASS = ASC_COL_CLASS)
-  
+
+head(surf_col)  
 ```
 
 #### B2 Colour Class
@@ -624,49 +633,51 @@ B2_col <-  sit_data[['HOR']] %>%
            grepl('^2', DESIGN_SUBDIV) == TRUE) %>% 
   inner_join(., hno_firstB2, 
              by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO', 'HORIZON_NO')) %>%
-  left_join(., sit_data[['COL']], 
+  left_join(., sit_data[['HCO']], 
             by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO', 'HORIZON_NO')) %>% 
   filter(HOR_COL_NO == 1 & MOISTURE_STAT != 'D') %>% 
   dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, HORIZON_NAME, COLOUR_BOOK, COLOUR_CODE) %>% 
-  left_join(., sit_colours, by = c('COLOUR_BOOK', 'COLOUR_CODE')) %>% 
-  select(PROJECT_CODE, SITE_ID, OBS_NO, HEX_COLOUR, ASC_COL_CLASS) %>% 
+  left_join(., hex_cols, by = c('COLOUR_BOOK', 'COLOUR_CODE')) %>% 
+  select(PROJECT_CODE, SITE_ID, OBS_NO, COLOUR_CODE, HEX, ASC_COL_CLASS) %>% 
   rename(
-    B2_HEX_COLOUR = HEX_COLOUR,
+    B2_HEX_COLOUR = HEX,
     B2_COLOUR_CLASS = ASC_COL_CLASS)
-  
+
+head(B2_col)
 ```
 
 ***
 
 ### Assemble 
 
-
 ```{r l1_all}
 
-layer_one_final <- 
-  reduce(list(l1_simple, l1_dist, l1_gilgai, hardset,
-              duplexiness, l1_scf, l1_outcrop,l1_depths, h_count,
-              hname_max, AB_textures, surf_col, B2_col),
+locs <- sit_data[['OLC']] %>% 
+  st_as_sf(coords = c('LONGITUDE', 'LATITUDE'), crs = 4283) %>% 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO)
+
+fancy_bits <- 
+  reduce(list(max_dist, gilgai, hardset,
+              duplexiness, max_scf, max_outcrop, all_depths, h_count,
+              hname_max, AB_textures, has_bleach, surf_col, B2_col),
          full_join, by = c('PROJECT_CODE','SITE_ID', 'OBS_NO')) %>% 
-  filter(!is.na(LONGITUDE)) %>% 
-  st_as_sf(coords = c('LONGITUDE', 'LATITUDE'), crs = 4283)
+  left_join(locs, ., by = c('PROJECT_CODE','SITE_ID', 'OBS_NO')) 
 
 # e.g.
-pltest <- dplyr::filter(layer_one_final, PROJECT_CODE == 'MDIA')
+pltest <- dplyr::filter(fancy_bits, PROJECT_CODE == 'DLR')
 
-cols <-sort(unique(paste0('#', pltest$B2_HEX_COLOUR)))
-cols <- cols[-which(cols == '#NA')]
+cols <- sort(unique(pltest$B2_HEX_COLOUR))
 
 ggplot() +
-  geom_sf(data = pltest, aes(colour = B2_HEX_COLOUR), pch = 16, size = 3,
+  geom_sf(data = pltest, aes(colour = B2_HEX_COLOUR), pch = 16, size = 2,
           show.legend = FALSE) +
   scale_colour_manual(values = cols,
                       labels = sort(unique(pltest$B2_HEX_COLOUR))) +
+  ggtitle("Soil colours - first B2 horizon", subtitle = "SALI Project DLR") +
   theme_minimal()
 
 
-
+saveRDS(fancy_bits, file.path(getwd(), 'DERIVED_DATA', 'fancy_bits.rds'))
 ```
 
-
-
+***
