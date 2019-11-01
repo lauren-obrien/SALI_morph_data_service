@@ -20,8 +20,8 @@ rgb2hex <- function(r,g,b) rgb(r, g, b, maxColorValue = 255)
 
 To generate hex colours for the munsell codes used in sit_horizon_colours and sit_mottles,
 
-```{r longway}
-today <- '20191028' 
+```{r longway, results = 'hide'}
+today <- '20191101' 
 sit_datafile <- file.path(getwd(), 'SALI_DATA', 
                           paste0('SALI_SIT-data_', today, '.rds'))
 dec_datafile <- file.path(getwd(), 'SALI_DATA', 
@@ -61,6 +61,10 @@ all_cols_translated <- lapply(all_cols$COL_FORMATTED, MunsellToRGB) %>%
 
 write_csv(all_cols_translated, 
           file.path(getwd(), 'helpers', 'translated_colours.csv'))
+```
+
+```{r eg}
+head(all_cols_translated)
 ```
 
 A minority of mottles are described with reference to Munsell codes - most are described using the simpler Yellow Book colours. May as well supply a hex value here too, with reference to common values seen in the field. Nominating some fairly arbitrary hex values for Yellow Book mottle colours as:
