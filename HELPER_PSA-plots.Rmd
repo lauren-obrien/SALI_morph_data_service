@@ -10,7 +10,7 @@ knitr::opts_chunk$set(echo = TRUE, results = 'hold', fig.height = 6,
                       fig.align = 'center', warning = FALSE, message = FALSE)
 ```
 
-Field texture measures the behaviour of a small volume of soil at field capacity. The Yellow Book notes correctly that texture doesn't map neatly to PSA (which notably excludes +2mm size fractions and ignores the influence of organic matter, sesquioxides, etc on soil physical behaviour). However, texture codes are qualitatively defined using references to particle size fractions and are roughly mapped to the texture triangle, so PSA data can potentially be used to sanity-check these rankings. That said, not all PSA data makes sense next to texture codes, for instance there are some sand group PSAs with 60% clay. 
+Field texture measures the behaviour of a small volume of soil at field capacity. The Yellow Book notes correctly that texture doesn't map neatly to PSA (which notably excludes +2mm size fractions and ignores the influence of organic matter, sesquioxides, etc on soil physical behaviour). However, texture codes are qualitatively defined using references to particle size fractions and are roughly mapped to the texture triangle, so PSA data can potentially be used to sanity-check these rankings. That said, not all PSA data makes sense next to texture codes, for instance there are some sand group PSAs in SALI with 60% clay. 
 
 While the Yellow Book says not to adjust texture codes in the face of PSA data, that's a sentence that doesn't account for actual errors in a database. Its trying to make the point that PSA measurements and physical soil behaviour aren't necessarily tightly linked (e.g. in subplastic soils) and that the surveyor should trust their perceptions. 
 
@@ -117,7 +117,7 @@ dplyr::filter(tex_psa_wide, TOTAL_PSA > 105) %>%
            head()
 ```
 
-These can only be resolved manually with reference to full descriptions, and even then it can be hard to tell what to do. For the purposes of this ranking exercise, I'm just going to filter out anything that totals over 105%.
+These can only be resolved manually with reference to full descriptions, and even then it can be hard to tell what to do. For the purposes of this exercise, I'm just going to filter out anything that totals over 105%.
 
 A similar issue exists for samples that total less than 95% (n = `r dplyr::filter(tex_psa_wide, TOTAL_PSA < 95) %>% nrow()`):
 

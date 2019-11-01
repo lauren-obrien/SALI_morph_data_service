@@ -12,7 +12,7 @@
 
 <meta name="author" content="Lauren O’Brien" />
 
-<meta name="date" content="2019-10-23" />
+<meta name="date" content="2019-11-01" />
 
 <title>Checking PSA data vs Texture Codes</title>
 
@@ -365,12 +365,12 @@ summary {
 
 <h1 class="title toc-ignore">Checking PSA data vs Texture Codes</h1>
 <h4 class="author">Lauren O’Brien</h4>
-<h4 class="date">2019-10-23</h4>
+<h4 class="date">2019-11-01</h4>
 
 </div>
 
 
-<p>Field texture measures the behaviour of a small volume of soil at field capacity. The Yellow Book notes correctly that texture doesn’t map neatly to PSA (which notably excludes +2mm size fractions and ignores the influence of organic matter, sesquioxides, etc on soil physical behaviour). However, texture codes are qualitatively defined using references to particle size fractions and are roughly mapped to the texture triangle, so PSA data can potentially be used to sanity-check these rankings. That said, not all PSA data makes sense next to texture codes, for instance there are some sand group PSAs with 60% clay.</p>
+<p>Field texture measures the behaviour of a small volume of soil at field capacity. The Yellow Book notes correctly that texture doesn’t map neatly to PSA (which notably excludes +2mm size fractions and ignores the influence of organic matter, sesquioxides, etc on soil physical behaviour). However, texture codes are qualitatively defined using references to particle size fractions and are roughly mapped to the texture triangle, so PSA data can potentially be used to sanity-check these rankings. That said, not all PSA data makes sense next to texture codes, for instance there are some sand group PSAs in SALI with 60% clay.</p>
 <p>While the Yellow Book says not to adjust texture codes in the face of PSA data, that’s a sentence that doesn’t account for actual errors in a database. Its trying to make the point that PSA measurements and physical soil behaviour aren’t necessarily tightly linked (e.g. in subplastic soils) and that the surveyor should trust their perceptions.</p>
 <pre class="r"><code>options(stringsAsFactors = FALSE, scipen = 999)
 library(sf)            # vector data IO and processing
@@ -444,28 +444,28 @@ tex_psa_wide &lt;- left_join(tex_psa_wide, tex_psa_totals,
   select(TEXTURE, matches(&#39;^PSA_&#39;), TOTAL_PSA) %&gt;%
            head()</code></pre>
 <pre><code>## # A tibble: 6 x 6
-##   TEXTURE PSA_Silt PSA_Clay PSA_CS PSA_FS TOTAL_PSA
-##   &lt;chr&gt;      &lt;dbl&gt;    &lt;dbl&gt;  &lt;dbl&gt;  &lt;dbl&gt;     &lt;dbl&gt;
-## 1 &lt;NA&gt;          35        4     71     61       171
-## 2 LS            71        5     14     71       161
-## 3 LS            71        4     14     71       160
-## 4 LS            70        4     16     70       160
-## 5 LS            67        7     16     67       157
-## 6 FSL           68        7     12     68       155</code></pre>
-<p>These can only be resolved manually with reference to full descriptions, and even then it can be hard to tell what to do. For the purposes of this ranking exercise, I’m just going to filter out anything that totals over 105%.</p>
+##   TEXTURE PSA_CS PSA_Clay PSA_FS PSA_Silt TOTAL_PSA
+##   &lt;chr&gt;    &lt;dbl&gt;    &lt;dbl&gt;  &lt;dbl&gt;    &lt;dbl&gt;     &lt;dbl&gt;
+## 1 &lt;NA&gt;        71        4     61       35       171
+## 2 LS          14        5     71       71       161
+## 3 LS          14        4     71       71       160
+## 4 LS          16        4     70       70       160
+## 5 LS          16        7     67       67       157
+## 6 FSL         12        7     68       68       155</code></pre>
+<p>These can only be resolved manually with reference to full descriptions, and even then it can be hard to tell what to do. For the purposes of this exercise, I’m just going to filter out anything that totals over 105%.</p>
 <p>A similar issue exists for samples that total less than 95% (n = 775):</p>
 <pre class="r"><code>dplyr::filter(tex_psa_wide, TOTAL_PSA &lt; 95) %&gt;% 
   select(TEXTURE, matches(&#39;^PSA_&#39;), TOTAL_PSA) %&gt;%
            head()</code></pre>
 <pre><code>## # A tibble: 6 x 6
-##   TEXTURE PSA_Silt PSA_Clay PSA_CS PSA_FS TOTAL_PSA
-##   &lt;chr&gt;      &lt;dbl&gt;    &lt;dbl&gt;  &lt;dbl&gt;  &lt;dbl&gt;     &lt;dbl&gt;
-## 1 CL            29       60    0.5      5      94.5
-## 2 LC+            8       30   36       20      94  
-## 3 SCL           14       13   37       29      93  
-## 4 CL            19       13   NA       25      57  
-## 5 HC             7       62   10       13      92  
-## 6 SC             8        2   61       18      89</code></pre>
+##   TEXTURE PSA_CS PSA_Clay PSA_FS PSA_Silt TOTAL_PSA
+##   &lt;chr&gt;    &lt;dbl&gt;    &lt;dbl&gt;  &lt;dbl&gt;    &lt;dbl&gt;     &lt;dbl&gt;
+## 1 CL         0.5       60      5       29      94.5
+## 2 LC+       36         30     20        8      94  
+## 3 SCL       37         13     29       14      93  
+## 4 CL        NA         13     25       19      57  
+## 5 HC        10         62     13        7      92  
+## 6 SC        61          2     18        8      89</code></pre>
 <p>Some are missing data (particularly in the sand fractions), a few add to 0, and the rest are just a bit weird. They can go as well (note: this data is already in a queue to be corrected, behind a long line of other tasks).</p>
 <p>Along with removing samples from horizons without a texture code, and samples with too many missing components, and a couple of dud texture codes,</p>
 <pre class="r"><code>tex_psa_clean &lt;- tex_psa_wide %&gt;%
@@ -539,9 +539,9 @@ write_csv(stats_simple, file.path(getwd(), &#39;SALI_DATA&#39;, &#39;tex_psa_sim
 psa_plots &lt;- lapply(codes, function(x) {
   
   texs &lt;- dplyr::filter(tex_psa_norm, TEXTURE == x) %&gt;% 
-  rowwise() %&gt;% 
-  mutate(SAND = sum(c(PSA_CS, PSA_FS), na.rm = TRUE)) %&gt;% 
-  ungroup()
+    rowwise() %&gt;% 
+    mutate(SAND = sum(c(PSA_CS, PSA_FS), na.rm = TRUE)) %&gt;% 
+   ungroup()
   
   nt &lt;- nrow(texs)
   med_tex &lt;- summarise_all(texs, median)
@@ -589,10 +589,10 @@ ggtern(data = stplot,
 <pre class="r"><code># couple of outliers:
 filter(stplot, FINAL_RANK &lt; 150 &amp; PSA_Clay &gt; 50 )</code></pre>
 <pre><code>## # A tibble: 2 x 15
-##   TEXTURE PSA_Silt PSA_Clay PSA_CS PSA_FS TOTAL_PSA Not_Clay    W1    W2
-##   &lt;chr&gt;      &lt;dbl&gt;    &lt;dbl&gt;  &lt;dbl&gt;  &lt;dbl&gt;     &lt;dbl&gt;    &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt;
-## 1 LMS            6       68     22      4       100     32.2   -22   -62
-## 2 ZCLI          34       57      1      8       100     42.8   -73   -23
+##   TEXTURE PSA_CS PSA_Clay PSA_FS PSA_Silt TOTAL_PSA Not_Clay    W1    W2
+##   &lt;chr&gt;    &lt;dbl&gt;    &lt;dbl&gt;  &lt;dbl&gt;    &lt;dbl&gt;     &lt;dbl&gt;    &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt;
+## 1 LMS         22       68      4        6       100     32.2   -22   -62
+## 2 ZCLI         1       57      8       34       100     42.8   -73   -23
 ## # ... with 6 more variables: PSA_Sand &lt;dbl&gt;, GROUP_1 &lt;chr&gt;, GROUP_2 &lt;chr&gt;,
 ## #   GROUP_3 &lt;chr&gt;, GROUP_4 &lt;chr&gt;, FINAL_RANK &lt;dbl&gt;</code></pre>
 <pre class="r"><code># LMS is a typo for LMC I&#39;m p sure - have emailed about it
