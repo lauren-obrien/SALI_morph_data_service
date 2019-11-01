@@ -1,3 +1,8 @@
+20191031
+
+  * Two options for service shape to experiment with
+  * extended attributes left as code for now
+
 20191026
 
   * rejig extract to grab the lot
