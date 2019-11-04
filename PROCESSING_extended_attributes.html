@@ -12,7 +12,7 @@
 
 <meta name="author" content="Lauren O’Brien" />
 
-<meta name="date" content="2019-11-01" />
+<meta name="date" content="2019-11-04" />
 
 <title>Morphology WFS - Fancy bits</title>
 
@@ -365,7 +365,7 @@ summary {
 
 <h1 class="title toc-ignore">Morphology WFS - Fancy bits</h1>
 <h4 class="author">Lauren O’Brien</h4>
-<h4 class="date">2019-11-01</h4>
+<h4 class="date">2019-11-04</h4>
 
 </div>
 
@@ -1004,17 +1004,18 @@ surf_col &lt;- sit_data[[&#39;HCO&#39;]] %&gt;%
   left_join(., hex_cols, by = c(&#39;COLOUR_BOOK&#39;, &#39;COLOUR_CODE&#39;)) %&gt;% 
   select(PROJECT_CODE, SITE_ID, OBS_NO, COLOUR_CODE, HEX, ASC_COL_CLASS) %&gt;% 
   rename(
+    SURFACE_COLOUR_CODE = COLOUR_CODE,
     SURFACE_HEX_COLOUR = HEX,
     SURFACE_COLOUR_CLASS = ASC_COL_CLASS)
 
 head(surf_col)  </code></pre>
-<pre><code>##   PROJECT_CODE SITE_ID OBS_NO COLOUR_CODE SURFACE_HEX_COLOUR
-## 1          3MC       1      1      10YR22            #3C2E21
-## 2          3MC       2      1      10YR31            #4F463E
-## 3          3MC       3      1      10YR32            #544535
-## 4          3MC       4      1      10YR22            #3C2E21
-## 5          3MC       5      1      10YR32            #544535
-## 6          3MC       7      1      10YR32            #544535
+<pre><code>##   PROJECT_CODE SITE_ID OBS_NO SURFACE_COLOUR_CODE SURFACE_HEX_COLOUR
+## 1          3MC       1      1              10YR22            #3C2E21
+## 2          3MC       2      1              10YR31            #4F463E
+## 3          3MC       3      1              10YR32            #544535
+## 4          3MC       4      1              10YR22            #3C2E21
+## 5          3MC       5      1              10YR32            #544535
+## 6          3MC       7      1              10YR32            #544535
 ##   SURFACE_COLOUR_CLASS
 ## 1                Black
 ## 2                Black
@@ -1046,17 +1047,18 @@ B2_col &lt;-  sit_data[[&#39;HOR&#39;]] %&gt;%
   left_join(., hex_cols, by = c(&#39;COLOUR_BOOK&#39;, &#39;COLOUR_CODE&#39;)) %&gt;% 
   select(PROJECT_CODE, SITE_ID, OBS_NO, COLOUR_CODE, HEX, ASC_COL_CLASS) %&gt;% 
   rename(
+    B2_COLOUR_CODE = COLOUR_CODE,
     B2_HEX_COLOUR = HEX,
     B2_COLOUR_CLASS = ASC_COL_CLASS)
 
 head(B2_col)</code></pre>
-<pre><code>##   PROJECT_CODE SITE_ID OBS_NO COLOUR_CODE B2_HEX_COLOUR B2_COLOUR_CLASS
-## 1          3MC       1      1     7.5YR31       #50463F           Black
-## 2          3MC       2      1      10YR41       #685F55            Grey
-## 3          3MC       3      1      10YR42       #6E5D4B            Grey
-## 4          3MC       4      1     7.5YR31       #50463F           Black
-## 5          3MC       5      1     7.5YR32       #574437           Black
-## 6          3MC       8      1     7.5YR31       #50463F           Black</code></pre>
+<pre><code>##   PROJECT_CODE SITE_ID OBS_NO B2_COLOUR_CODE B2_HEX_COLOUR B2_COLOUR_CLASS
+## 1          3MC       1      1        7.5YR31       #50463F           Black
+## 2          3MC       2      1         10YR41       #685F55            Grey
+## 3          3MC       3      1         10YR42       #6E5D4B            Grey
+## 4          3MC       4      1        7.5YR31       #50463F           Black
+## 5          3MC       5      1        7.5YR32       #574437           Black
+## 6          3MC       8      1        7.5YR31       #50463F           Black</code></pre>
 <hr />
 </div>
 </div>

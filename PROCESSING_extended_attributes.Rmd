@@ -609,6 +609,7 @@ surf_col <- sit_data[['HCO']] %>%
   left_join(., hex_cols, by = c('COLOUR_BOOK', 'COLOUR_CODE')) %>% 
   select(PROJECT_CODE, SITE_ID, OBS_NO, COLOUR_CODE, HEX, ASC_COL_CLASS) %>% 
   rename(
+    SURFACE_COLOUR_CODE = COLOUR_CODE,
     SURFACE_HEX_COLOUR = HEX,
     SURFACE_COLOUR_CLASS = ASC_COL_CLASS)
 
@@ -640,6 +641,7 @@ B2_col <-  sit_data[['HOR']] %>%
   left_join(., hex_cols, by = c('COLOUR_BOOK', 'COLOUR_CODE')) %>% 
   select(PROJECT_CODE, SITE_ID, OBS_NO, COLOUR_CODE, HEX, ASC_COL_CLASS) %>% 
   rename(
+    B2_COLOUR_CODE = COLOUR_CODE,
     B2_HEX_COLOUR = HEX,
     B2_COLOUR_CLASS = ASC_COL_CLASS)
 
@@ -651,7 +653,6 @@ head(B2_col)
 ### Assemble 
 
 ```{r l1_all}
-
 locs <- sit_data[['OLC']] %>% 
   st_as_sf(coords = c('LONGITUDE', 'LATITUDE'), crs = 4283) %>% 
   dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO)
@@ -675,7 +676,6 @@ ggplot() +
                       labels = sort(unique(pltest$B2_HEX_COLOUR))) +
   ggtitle("Soil colours - first B2 horizon", subtitle = "SALI Project DLR") +
   theme_minimal()
-
 
 saveRDS(fancy_bits, file.path(getwd(), 'DERIVED_DATA', 'fancy_bits.rds'))
 ```
