@@ -29,13 +29,14 @@ library(tidyverse)     # general data manipulation and display
 This option emphasises minimising the number of layers in the service to align with the 'join levels' of Site, Observation, Horizon, Veg Community. Keeping samples and notes separate too.
 
 ```{r getdat}
-today <- '20191101' 
+today <- '20191212' 
 sit_datafile <- file.path(getwd(), 'SALI_DATA', 
                           paste0('SALI_SIT-data_', today, '.rds'))
 decode_datafile <- file.path(getwd(), 'SALI_DATA', 
                              paste0('SALI_SIT-data_decodes_', today, '.rds'))
 
 sit_data <- readRDS(sit_datafile)
+sit_data[['LAB']] <- NULL # out of scope still
 decodes  <- readRDS(decode_datafile)
 ```
 

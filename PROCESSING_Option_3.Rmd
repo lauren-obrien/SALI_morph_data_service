@@ -59,10 +59,11 @@ Earlier work - still mucking around in here
 Load data snapshot from 'DATA_sali-extract.Rmd'.
 
 ```{r getdat}
-today <- '20191024' 
+today <- '20191212' 
 sit_datafile <- file.path(getwd(), 'SALI_DATA', 
                           paste0('SALI_SIT-data_', today, '.rds'))
 sit_data <- readRDS(sit_datafile)
+sit_data[['LAB']] <- NULL # out of scope still
 ```
 
 ### Layer 1

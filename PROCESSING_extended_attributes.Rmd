@@ -22,13 +22,14 @@ options(stringsAsFactors = FALSE, scipen = 999)
 library(sf)
 library(tidyverse)
 
-today <- '20191101' 
+today <- '20191212' 
 sit_datafile <- file.path(getwd(), 'SALI_DATA', 
                           paste0('SALI_SIT-data_', today, '.rds'))
 decode_datafile <- file.path(getwd(), 'SALI_DATA', 
                              paste0('SALI_SIT-data_decodes_', today, '.rds'))
 
 sit_data <- readRDS(sit_datafile)
+sit_data[['LAB']] <- NULL # out of scope still
 decodes  <- readRDS(decode_datafile)
 ```
 
@@ -683,7 +684,7 @@ fancy_bits <-
   left_join(locs, ., by = c('PROJECT_CODE','SITE_ID', 'OBS_NO')) 
 
 # e.g.
-pltest <- dplyr::filter(fancy_bits, PROJECT_CODE == 'DLR')
+pltest <- dplyr::filter(fancy_bits, PROJECT_CODE == 'BAB')
 
 cols <- sort(unique(pltest$B2_HEX_COLOUR))
 
@@ -692,7 +693,7 @@ ggplot() +
           show.legend = FALSE) +
   scale_colour_manual(values = cols,
                       labels = sort(unique(pltest$B2_HEX_COLOUR))) +
-  ggtitle("Soil colours - first B2 horizon", subtitle = "SALI Project DLR") +
+  ggtitle("Soil colours - first B2 horizon", subtitle = "SALI Project BAB") +
   theme_minimal()
 
 saveRDS(fancy_bits, file.path(getwd(), 'DERIVED_DATA', 'fancy_bits.rds'))

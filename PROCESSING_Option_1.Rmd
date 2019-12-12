@@ -27,10 +27,11 @@ library(tidyverse)     # general data manipulation and display
 The simplest way to turn the morphology data into a service (from a maintainer's perspective, at least) is just to keep the existing layer structure from the SALI database, and spatialise each table. 
 
 ```{r datammmmm}
-today <- '20191101' 
+today <- '20191212' 
 sit_datafile <- file.path(getwd(), 'SALI_DATA', 
                           paste0('SALI_SIT-data_', today, '.rds'))
 sit_data <- readRDS(sit_datafile)
+sit_data[['LAB']] <- NULL # out of scope still
 ```
 
 Pros:
@@ -149,7 +150,6 @@ purrr::map2(spat_data, names(spat_data), function(lyr, nm) {
 ```{r check_write, echo = -1}
 test_gdb <- file.path(getwd(), 'DERIVED_DATA', 'TEST_01_SIMPLE.gdb')
 sf::st_layers(test_gdb)
-
 ```
 
 ***
