@@ -87,7 +87,7 @@ The data-holding tables in the sites module are structured as follows:
 Some additional tables hold decodes (meanings) for the coded data and are extracted separately below.
 
 ```{r getdat}
-today <- '20191101' # edit for fresh snapshot
+today <- '20191212' # edit for fresh snapshot
 
 sit_datafile <- file.path(getwd(), 'SALI_DATA', 
                           paste0('SALI_SIT-data_', today, '.rds'))
@@ -378,9 +378,14 @@ if(file.exists(sit_datafile)) {
           paste0(temp1,
                  "select * from temp1
                   inner join sit_samples using (project_code)
-                  order by project_code, site_id, obs_no, sample_no"))
+                  order by project_code, site_id, obs_no, sample_no")),
       # 36 lab results 
-      # see API at https://soil-chem.information.qld.gov.au/
+      "LAB" = 
+        dbGetQuery(SALI,
+          paste0(temp1,
+                 "select * from temp1
+                  inner join sit_lab_results using (project_code)
+                  order by project_code, site_id, obs_no, sample_no"))
       )
   saveRDS(sit_data, sit_datafile)
 }
@@ -416,6 +421,8 @@ Longer code lists e.g. geology, landform elements are in their own tables
   19. SIT_FIELD_TEST_TYPES
   20. SIT_FIELD_TEST_TYPE_SPECS
   21. SIT_NOTE_TYPES
+  22. SIT_LABS
+  23. SIT_LAB_METHODS
 
 ```{r getdecodes}
 site_domains <-
@@ -458,7 +465,8 @@ site_domains <-
     'SUBS TEXTURES', 'SURF CONDITION STATUS', 'TAX UNIT TYPES',
     'TEXTURE QUALIFIERS', 'VEG STRAT COVER CLASS', 'VEG STRAT GROW FORMS',
     'VEG STRAT HEIGHT CLASS', 'VEG STRATA CODES', 'WATER REPELLENCE', 
-    'WRB SOIL GROUP')
+    'WRB SOIL GROUP', 'LAB METH UNITS', 'LAB RESULT QC CODES', 
+    'LAB RESULT STATUS', 'LAB SAMPLE STATUS')
 
 decode_datafile <- file.path(getwd(), 'SALI_DATA', 
                              paste0('SALI_SIT-data_decodes_', today, '.rds'))
@@ -496,7 +504,9 @@ if(file.exists(decode_datafile)) {
       "FAC" = dbGetQuery(SALI, "select * from sit_facies"),
       "FTT" = dbGetQuery(SALI, "select * from sit_field_test_types"),
       "FTS" = dbGetQuery(SALI, "select * from sit_field_test_type_specs"),
-      "NTP" = dbGetQuery(SALI, "select * from sit_note_types") 
+      "NTP" = dbGetQuery(SALI, "select * from sit_note_types"),
+      "LAB" = dbGetQuery(SALI, "select * from sit_labs"),
+      "LMT" = dbGetQuery(SALI, "select * from sit_lab_methods")
     )
   saveRDS(decodes, decode_datafile)
 }
@@ -536,7 +546,7 @@ table_names <- c('SIT_SITES', 'SIT_SITE_LAND_USES', 'SIT_SITE_MAN_PRACS',
                  'SIT_HORIZON_COLOURS', 'SIT_MOTTLES', 'SIT_COARSE_FRAGS', 
                  'SIT_STRUCTURES', 'SIT_SEGREGATIONS', 'SIT_FABRICS', 'SIT_CUTANS',
                  'SIT_CRACKS', 'SIT_MACROPORES', 'SIT_STRENGTHS', 'SIT_PANS', 
-                 'SIT_ROOTS', 'SIT_FIELD_TESTS', 'SIT_SAMPLES')
+                 'SIT_ROOTS', 'SIT_FIELD_TESTS', 'SIT_SAMPLES', 'SIT_LAB_RESULTS')
 names(sit_data) <- table_names
 
 # do the same for decode tables - note name change, should make the tables
@@ -548,7 +558,8 @@ decode_names <- c('REF_CODES', 'REF_ELEM_TYPES', 'REF_PATT_TYPES',
                   'REF_EROSION_TYPES', 'REF_EROSION_DEGREES', 'REF_VEG_SPECIES', 
                   'REF_STRUCT_FORMS', 'REF_TEXTURES', 'REF_COLOURS', 
                   'REF_COLOUR_CONVERT', 'REF_FACIES', 'REF_FIELD_TEST_TYPES', 
-                  'REF_FIELD_TEST_TYPE_SPECS', 'REF_NOTE_TYPES')
+                  'REF_FIELD_TEST_TYPE_SPECS', 'REF_NOTE_TYPES',
+                  'REF_LABS', 'REF_LAB_METHODS')
 names(decodes) <- decode_names
 
 # add to gpkg
@@ -562,7 +573,7 @@ purrr::map2(sit_data, table_names, function(lyr, nm) { dbWriteTable(con, nm, lyr
 purrr::map2(decodes, decode_names, function(lyr, nm) { dbWriteTable(con, nm, lyr) })
 dbDisconnect(con)
   
-# about 300MB on disk so not v practical?
+# about 450MB on disk so not v practical?
 # Need to use Virtual Layer in QGIS (and whatever the Arc equiv is... make Query
 # Layer??) to join tables
 # easier to work with in R/Py, likely
@@ -571,7 +582,7 @@ dbDisconnect(con)
 #### Example plot
 
 ```{r plotdemo, results = 'hold'}
-sph_bab <- dplyr::filter(sit_data[['FTS']], PROJECT_CODE == 'BAB' &
+sph_bab <- dplyr::filter(sit_data[['SIT_FIELD_TESTS']], PROJECT_CODE == 'BAB' &
                          TEST_TYPE == 'PH' & OBS_NO == 1 & 
                            HORIZON_NO  == 1 & TEST_NO == 1) %>% 
   left_join(., SIT_LOCATIONS, by = c('PROJECT_CODE', 'SITE_ID', 'OBS_NO')) %>% 
