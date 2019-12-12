@@ -450,9 +450,9 @@ head(has_bleach)
 
 Texture contrast status of a soil under the ASC requires presence of a 'clear or abrupt textural B':
 
-  * Transition between last A (or B1) and first B2 be 'clear, abrupt, or sharp' (5cm or less)
-  * B horizons must be SCL or heavier
-  * if the B horizon is not a clay, the A horizon must be at least half as clayey, otherwise the A must be at least 20% less clayey
+  * Transition between last A (or B1) and first B be 'clear, abrupt, or sharp' (5cm or less)
+  * The B horizon must be SCL or heavier
+  * if the lower horizon is not a clay, the upper horizon must be at least half as clayey, otherwise the A must be at least 20% less clayey
   
 'Duplex' soils in the Principal Profile Form system (Northcote) are less strictly defined:
 
@@ -461,9 +461,9 @@ Texture contrast status of a soil under the ASC requires presence of a 'clear or
   
 Leaving aside the odd treatment of categories, this amounts to e.g. S -> L, SL -> CL, CL -> LMC. So the PPF system is slightly more relaxed than the ASC in terms of both texture jump and transition distance.
 
-Both of these definition sets are based on field experience. While there are many management implications to a texture contrast profile, the exact cutoffs used to define them have not been strongly operationalised - they are somewhat arbitrary. Texture contrast soils are like art, you know it when you see it.
+Both of these definition sets are based on field experience. While there are many management implications to a texture contrast profile, the exact cutoffs used to define them have not been strongly operationalised - they are somewhat arbitrary. Texture contrast soils are like art, you know them when you see them.
 
-It may be useful, then, to define a combined scale of texture contrast behaviour where this macro feature becomes progressively more obvious. With texture codes placed into the GROUP_2 rankings in `tex_ranks`, the following will be applied to profiles where a Clear, Abrupt or Sharp horizon transition has been recorded between the the last A (or B1) horizon and the next horizon, which must be a B2. Buried soils are not considered.
+It may be useful, then, to define a combined scale of texture contrast behaviour where this macro feature becomes progressively more obvious. With texture codes placed into the GROUP_2 rankings in `tex_ranks`, the following will be applied to profiles where a Clear, Abrupt or Sharp horizon transition has been recorded between the the last A (or B1) horizon and the next horizon, which must be a B. Buried soils are not considered.
 
   * NA - insufficient data to diagnose
   * 0 - no texture contrast present by any accepted definition
@@ -476,29 +476,48 @@ By the above, rank 3's should always key out as SO/CH/KU in the ASC, and many of
 Note that there'll be a bunch of these that almost make the cut by recorded morphology alone, but are either not classified because boundary sharpness data is missing, or ranked too low because boundary sharpness data is wrong. If the soil classification on one of these sites is an ASC SO/CH/KU, or a PPF of D*, they should be regarded as texture contrast soils too. The code below includes some overrides on the basis of classification.
 
 ```{r duplexiness}
-# get bound_distinct of last A  or B1 horizon in profile
+# get the deepest A or B1 horizon that's not D or G 
 last_bnd_distinct <- sit_data[['HOR']] %>% 
   dplyr::filter(is.na(DESIGN_NUM_PREFIX)) %>% 
   dplyr::filter(DESIGN_MASTER %in% c('A', 'A?') | 
                   # B1 horizons:
                   DESIGN_MASTER == 'B' & 
                     grepl('^1', DESIGN_SUBDIV) & 
-                      is.na(DESIGN_NUM_PREFIX)) %>% 
+                      is.na(DESIGN_NUM_PREFIX)) %>%
+  dplyr::filter(BOUND_DISTINCT %in% c('C', 'A', 'S') | is.na(BOUND_DISTINCT)) %>% 
   group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>% 
   dplyr::filter(HORIZON_NO == max(HORIZON_NO)) %>% 
-  ungroup() %>% 
-  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, HORIZON_NAME,
-                TEXTURE, BOUND_DISTINCT) %>% 
-  mutate(SHARP_ENOUGH = case_when(BOUND_DISTINCT %in% c('S', 'A', 'C') ~ TRUE,
-                                  is.na(BOUND_DISTINCT) ~ NA,
-                                  TRUE ~ FALSE)) %>% 
+  mutate(SHARP_ENOUGH = ifelse(!is.na(BOUND_DISTINCT), TRUE, FALSE)) %>% 
   dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, HORIZON_NAME, TEXTURE, 
                 BOUND_DISTINCT, SHARP_ENOUGH) %>% 
   rename(LAST_HORIZON_NO = HORIZON_NO, SURFACE_TEXTURE = TEXTURE,
-         SURF_HNAME = HORIZON_NAME)
+         SURF_HNAME = HORIZON_NAME) %>% 
+  ungroup()
+ 
 
-# for profiles in the above, check if the next horizon down is a B2 
-is_next_B2 <- last_bnd_distinct %>%   
+## get bound_distinct of last A  or B1 horizon in profile
+#last_bnd_distinct <- sit_data[['HOR']] %>% 
+#  dplyr::filter(is.na(DESIGN_NUM_PREFIX)) %>% 
+#  dplyr::filter(DESIGN_MASTER %in% c('A', 'A?') | 
+#                  # B1 horizons:
+#                  DESIGN_MASTER == 'B' & 
+#                    grepl('^1', DESIGN_SUBDIV) & 
+#                      is.na(DESIGN_NUM_PREFIX)) %>% 
+#  group_by(PROJECT_CODE, SITE_ID, OBS_NO) %>% 
+#  dplyr::filter(HORIZON_NO == max(HORIZON_NO)) %>% 
+#  ungroup() %>% 
+#  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, HORIZON_NAME,
+#                TEXTURE, BOUND_DISTINCT) %>% 
+#  mutate(SHARP_ENOUGH = case_when(BOUND_DISTINCT %in% c('S', 'A', 'C') ~ TRUE,
+#                                  is.na(BOUND_DISTINCT) ~ NA,
+#                                  TRUE ~ FALSE)) %>% 
+#  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, HORIZON_NO, HORIZON_NAME, TEXTURE, 
+#                BOUND_DISTINCT, SHARP_ENOUGH) %>% 
+#  rename(LAST_HORIZON_NO = HORIZON_NO, SURFACE_TEXTURE = TEXTURE,
+#         SURF_HNAME = HORIZON_NAME)
+
+# for profiles in the above, check if the next horizon down is a B 
+is_next_B <- last_bnd_distinct %>%   
   dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, LAST_HORIZON_NO) %>% 
   mutate(HORIZON_NO = LAST_HORIZON_NO + 1) %>% 
   left_join(., dplyr::select(sit_data[['HOR']], 
@@ -506,18 +525,17 @@ is_next_B2 <- last_bnd_distinct %>%
                              DESIGN_MASTER, DESIGN_NUM_PREFIX,
                              DESIGN_SUBDIV, HORIZON_NAME, TEXTURE),
             by = c("PROJECT_CODE", "SITE_ID", "OBS_NO", "HORIZON_NO")) %>% 
-  mutate(IS_OVER_B2 = case_when(DESIGN_MASTER %in% c('B', 'B?') &
-                               is.na(DESIGN_NUM_PREFIX) &
-                               grepl('^2', DESIGN_SUBDIV) ~ TRUE,
+  mutate(IS_OVER_B = case_when(DESIGN_MASTER %in% c('B', 'B?') &
+                               is.na(DESIGN_NUM_PREFIX) ~ TRUE,
                              # unspecified B also allowed 
                              DESIGN_MASTER %in% c('B', 'B?') &
                                is.na(DESIGN_NUM_PREFIX) &
                                is.na(DESIGN_SUBDIV) ~ TRUE, 
                              is.na(HORIZON_NAME) ~ NA,
                              TRUE ~ FALSE)) %>%
-  mutate(NEXT_TEXTURE = ifelse(IS_OVER_B2 == TRUE, TEXTURE, NA)) %>% 
+  mutate(NEXT_TEXTURE = ifelse(IS_OVER_B == TRUE, TEXTURE, NA)) %>% 
   rename(NEXT_HNAME = HORIZON_NAME) %>% 
-  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, NEXT_HNAME, IS_OVER_B2, NEXT_TEXTURE) 
+  dplyr::select(PROJECT_CODE, SITE_ID, OBS_NO, NEXT_HNAME, IS_OVER_B, NEXT_TEXTURE) 
 
 # factorise group 2
 group_2 <- dplyr::select(tex_ranks, TEXTURE, GROUP_2) %>% 
@@ -542,7 +560,7 @@ dupl_class <- dplyr::filter(sit_data[['OCL']], SOIL_CLASS_NO == 1) %>%
          BOTH_TC = ifelse(PPF_TC == TRUE & ASC_TC == TRUE, TRUE, FALSE))
 
 # rate
-duplexiness <- full_join(last_bnd_distinct, is_next_B2) %>% 
+duplexiness <- full_join(last_bnd_distinct, is_next_B) %>% 
   left_join(., group_2, by = c('SURFACE_TEXTURE' = 'TEXTURE')) %>% 
   rename(SURFACE_GROUP = GROUP_2) %>% 
   left_join(., group_2, by = c('NEXT_TEXTURE' = 'TEXTURE')) %>% 
@@ -551,7 +569,7 @@ duplexiness <- full_join(last_bnd_distinct, is_next_B2) %>%
   mutate(DUPLEXINESS = case_when(is.na(SHARP_ENOUGH) ~ NA_real_,
                                  is.na(SUBSOIL_GROUP) ~ NA_real_,
                                  is.na(SURFACE_GROUP) ~ NA_real_,
-                                 SHARP_ENOUGH == FALSE | IS_OVER_B2 == FALSE ~ 0,
+                                 SHARP_ENOUGH == FALSE | IS_OVER_B == FALSE ~ 0,
                                  RANK_JUMP <= 4  ~ 0,
                                  RANK_JUMP <  7  ~ 1,
                                  RANK_JUMP <  10 ~ 2,
@@ -678,6 +696,7 @@ ggplot() +
   theme_minimal()
 
 saveRDS(fancy_bits, file.path(getwd(), 'DERIVED_DATA', 'fancy_bits.rds'))
+#fancy_bits <- readRDS(file.path(getwd(), 'DERIVED_DATA', 'fancy_bits.rds'))
 ```
 
 ***
